@@ -1,0 +1,18 @@
+# NeuralChat API — Python dependencies
+
+# FastAPI + server
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.9
+
+# LangChain core
+langchain-core>=0.3.0
+
+# Providers (uncomment as needed)
+langchain-cohere>=0.3.0
+cohere>=5.0.0
+# langchain-openai>=0.1.0
+# langchain-groq>=0.1.0
+
+# Utilities
+pydantic>=2.0.0

@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>NeuralChat</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico"/>
+  <link rel="apple-touch-icon" href="/favicon.ico"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.2.0/marked.min.js"></script>
+  <link rel="stylesheet" href="/static/styles.css"/>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+<div id="cursorGlow"></div>
+
+<!-- ══════════════════════════════════
+     SIDEBAR
+══════════════════════════════════ -->
+<aside class="sidebar" id="sidebar">
+
+  <div class="sb-brand">
+    <div class="sb-logo">N</div>
+    <div class="sb-brand-text">
+      <div class="sb-name">NeuralChat</div>
+      <div class="sb-ver">v6.0 · FastAPI</div>
+    </div>
+    <button class="icon-btn" onclick="App.toggleSidebar()" title="Collapse">
+      <svg viewBox="0 0 24 24"><path d="M11 19l-7-7 7-7M18 19l-7-7 7-7"/></svg>
+    </button>
+  </div>
+
+  <!-- Usage meter (hidden when user has own key) -->
+  <div class="usage-wrap" id="usageWrap">
+    <div class="usage-row">
+      <span class="usage-lbl" id="usageLbl">Free requests today</span>
+      <span class="usage-count" id="usageCount">0 / 20</span>
+    </div>
+    <div class="usage-track"><div class="usage-fill" id="usageFill"></div></div>
+    <div class="usage-hint" id="usageHint">
+      Using shared key ·
+      <span class="usage-link" onclick="App.focusKeyInput()">add your own for unlimited access</span>
+    </div>
+  </div>
+
+  <!-- Limit-hit / no-key banner -->
+  <div class="api-banner" id="apiBanner">
+    <svg viewBox="0 0 24 24" class="banner-icon"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <div>
+      <div class="banner-title" id="bannerTitle">Daily limit reached</div>
+      <div class="banner-sub" id="bannerSub">Add your own API key to continue</div>
+    </div>
+  </div>
+
+  <div class="sb-scroll">
+
+    <!-- ── Model & Key ── -->
+    <div class="accordion" id="acc-model">
+      <div class="acc-hdr" onclick="App.toggleAcc('acc-model')">
+        <span class="acc-icon">⬡</span>
+        <span class="acc-title">Model &amp; Key</span>
+        <svg class="acc-arrow" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="acc-body">
+        <div class="acc-content">
+
+          <div class="field-group">
+            <label class="field-lbl">Provider</label>
+            <select id="providerSel" class="nc-select" onchange="App.onProviderChange()">
+              <option value="Cohere">Cohere</option>
+              <option value="OpenAI">OpenAI</option>
+              <option value="Groq">Groq</option>
+            </select>
+            <div class="provider-tier" id="providerTier"></div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-lbl">Model</label>
+            <select id="modelSel" class="nc-select" onchange="App.onModelChange()">
+              <option value="command-a-03-2025">command-a-03-2025</option>
+              <option value="command-r-plus-08-2024">command-r-plus-08-2024</option>
+              <option value="command-r-08-2024">command-r-08-2024</option>
+              <option value="command-r7b-12-2024">command-r7b-12-2024</option>
+            </select>
+            <div class="model-cost" id="modelCost"></div>
+          </div>
+
+          <div class="field-group" id="keyFieldGroup">
+            <div class="field-lbl-row">
+              <label class="field-lbl">Your API Key</label>
+              <span class="field-opt">optional</span>
+            </div>
+            <div class="key-wrap">
+              <input type="password" id="apiKeyInput" class="nc-input"
+                placeholder="Leave blank to use shared key…"
+                oninput="App.onApiKeyChange(this.value)"
+                autocomplete="off" spellcheck="false"/>
+              <button class="key-vis-btn" onclick="App.toggleKeyVis()">
+                <svg id="eyeShow" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg id="eyeHide" viewBox="0 0 24 24" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              </button>
+            </div>
+            <div class="key-status" id="keyStatus"></div>
+            <div class="key-docs" id="keyDocs"></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Prompting Mode ── -->
+    <div class="accordion" id="acc-mode">
+      <div class="acc-hdr" onclick="App.toggleAcc('acc-mode')">
+        <span class="acc-icon">◈</span>
+        <span class="acc-title">Prompting Mode</span>
+        <svg class="acc-arrow" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="acc-body">
+        <div class="acc-content">
+          <div class="mode-pills" id="modePills"></div>
+          <div id="modeGuideInline"></div>
+          <div id="modeOptions"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Persona ── -->
+    <div class="accordion" id="acc-persona">
+      <div class="acc-hdr" onclick="App.toggleAcc('acc-persona')">
+        <span class="acc-icon">◉</span>
+        <span class="acc-title">Persona</span>
+        <svg class="acc-arrow" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="acc-body">
+        <div class="acc-content">
+          <div class="field-group">
+            <select id="personaSel" class="nc-select" onchange="App.onPersonaChange()"></select>
+            <div class="persona-tip" id="personaTip"></div>
+          </div>
+          <div class="field-group">
+            <div class="field-lbl-row">
+              <span class="field-lbl">System Prompt</span>
+              <span class="field-opt">overrides persona</span>
+            </div>
+            <textarea id="customSysPrompt" class="nc-textarea" rows="3"
+              placeholder="Leave blank to use persona…"
+              oninput="S.customSysPrompt=this.value;saveState()"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Parameters ── -->
+    <div class="accordion" id="acc-params">
+      <div class="acc-hdr" onclick="App.toggleAcc('acc-params')">
+        <span class="acc-icon">⚙</span>
+        <span class="acc-title">Parameters</span>
+        <svg class="acc-arrow" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="acc-body">
+        <div class="acc-content">
+          <div class="field-group">
+            <div class="field-lbl">Temperature <span class="param-val" id="tempVal">0.70</span></div>
+            <input type="range" id="tempSlider" class="nc-slider" min="0" max="1" step="0.05" value="0.7" oninput="App.onTempChange(this.value)"/>
+            <div class="slider-labels"><span>Precise</span><span>Creative</span></div>
+          </div>
+          <div class="field-group">
+            <div class="field-lbl">Max Tokens <span class="param-val" id="maxTokVal">1024</span></div>
+            <input type="range" id="maxTokSlider" class="nc-slider" min="128" max="4096" step="128" value="1024" oninput="App.onMaxTokChange(this.value)"/>
+            <div class="slider-labels"><span>128</span><span>4096</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Memory ── -->
+    <div class="accordion" id="acc-memory">
+      <div class="acc-hdr" onclick="App.toggleAcc('acc-memory')">
+        <span class="acc-icon">◎</span>
+        <span class="acc-title">Memory</span>
+        <label class="toggle-switch" onclick="event.stopPropagation()" style="margin-left:auto">
+          <input type="checkbox" id="memoryToggle" checked onchange="App.onMemoryChange()"/>
+          <span class="toggle-track"></span>
+        </label>
+        <svg class="acc-arrow" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="acc-body">
+        <div class="acc-content">
+          <div class="memory-viz">
+            <div class="mem-status-row">
+              <span class="mem-dot" id="memDot"></span>
+              <span id="memStatusText" class="mem-status-text">Active · 0 messages</span>
+            </div>
+            <div class="mem-track"><div class="mem-fill" id="memBarFill"></div></div>
+          </div>
+          <button class="nc-btn-ghost" onclick="App.resetMemory()">
+            <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.96"/></svg>
+            Reset memory
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Chat History ── -->
+    <div class="accordion" id="acc-history">
+      <div class="acc-hdr" onclick="App.toggleAcc('acc-history')">
+        <span class="acc-icon">○</span>
+        <span class="acc-title">Chat History</span>
+        <button class="icon-btn acc-action-btn" onclick="event.stopPropagation();App.newChat()" title="New chat">
+          <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <svg class="acc-arrow" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="acc-body">
+        <div class="acc-content">
+          <div class="history-list" id="historyList"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /sb-scroll -->
+
+  <!-- Stats footer -->
+  <div class="sb-footer" id="sbFooter">
+    <div class="stat-item"><span class="stat-lbl">Msgs</span><span class="stat-val" id="statMsgs">0</span></div>
+    <div class="stat-sep"></div>
+    <div class="stat-item"><span class="stat-lbl">Tokens</span><span class="stat-val" id="statTok">0</span></div>
+    <div class="stat-sep"></div>
+    <div class="stat-item"><span class="stat-lbl">Cost</span><span class="stat-val" id="statCost">$0.00</span></div>
+  </div>
+
+</aside>
+
+<!-- ══════════════════════════════════
+     MAIN
+══════════════════════════════════ -->
+<main class="main">
+
+  <header class="topbar">
+    <button class="icon-btn topbar-btn" onclick="App.toggleSidebar()">
+      <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <div class="topbar-brand">
+      <div class="topbar-logo">N</div>
+      <span class="topbar-name">NeuralChat</span>
+    </div>
+    <div class="topbar-chips">
+      <span class="topbar-chip chip-mode" id="topbarMode">Zero-Shot</span>
+      <span class="topbar-chip chip-model" id="topbarModel">Cohere · command-a-03-2025</span>
+      <span class="status-dot" id="statusDot"></span>
+    </div>
+    <div class="topbar-actions">
+      <button class="icon-btn topbar-btn" onclick="App.newChat()" title="New chat (Ctrl+Shift+N)">
+        <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <button class="icon-btn topbar-btn" onclick="App.exportChat()" title="Export JSON (Ctrl+Shift+E)">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="chat-viewport" id="chatViewport">
+    <div class="chat-messages" id="chatMessages"></div>
+  </div>
+
+  <div class="input-bar">
+    <div class="input-inner">
+      <div class="input-hint" id="inputHint"></div>
+      <div class="input-wrap" id="inputWrap">
+        <textarea id="msgInput" class="msg-textarea" placeholder="Message…" rows="1"
+          onkeydown="App.onKeyDown(event)" oninput="App.autoResize(this)"></textarea>
+        <div class="input-btns">
+          <button class="icon-btn example-btn" onclick="App.fillExample()" title="Example prompt">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          </button>
+          <button class="send-btn" id="sendBtn" onclick="App.sendMessage()">
+            <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="input-footer">
+        <span class="mode-badge" id="inputModeBadge">Zero-Shot</span>
+        <span class="input-tip">Enter to send · Shift+Enter for newline</span>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<div id="toastContainer" class="toast-container"></div>
+<script src="/static/script.js"></script>
+</body>
+</html>
