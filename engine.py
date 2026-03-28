@@ -39,17 +39,24 @@ class BaseRunner(ABC):
         return custom.strip() if custom.strip() else persona
 
     @staticmethod
-    def _get_past(history: InMemoryChatMessageHistory | None, depth: int) -> list:
+    def _get_history(kw: dict) -> InMemoryChatMessageHistory | None:
+        """Fetch or create the history object for the current session."""
+        get_hist   = kw.get("get_history")
+        session_id = kw.get("session_id", "default")
+        return get_hist(session_id) if get_hist else None
+
+    @staticmethod
+    def _past(history: InMemoryChatMessageHistory | None, depth: int) -> list:
         """Return the last `depth` message pairs from history."""
-        if history is None:
+        if not history:
             return []
         msgs = history.messages or []
-        return msgs[-(depth * 2):] if depth > 0 else []
+        return msgs[-(depth * 2):]
 
     @staticmethod
     def _save(history: InMemoryChatMessageHistory | None, user: str, ai: str) -> None:
         """Append a human/AI turn to history."""
-        if history is None:
+        if not history:
             return
         history.add_message(HumanMessage(content=user))
         history.add_message(AIMessage(content=ai))
@@ -58,14 +65,11 @@ class BaseRunner(ABC):
 class ZeroShotRunner(BaseRunner):
     def run(self, user_input: str, **kw) -> str:
         """Send a direct prompt, injecting history when memory is enabled."""
-        sys_text   = self._sys(kw.get("custom_sys", ""), kw.get("persona_prompt", ""))
-        mem_on     = kw.get("memory_enabled", True)
-        depth      = kw.get("memory_depth", 5)
-        get_hist   = kw.get("get_history")
-        session_id = kw.get("session_id", "default")
-
-        history = get_hist(session_id) if get_hist else None
-        past    = self._get_past(history, depth) if mem_on else []
+        sys_text = self._sys(kw.get("custom_sys", ""), kw.get("persona_prompt", ""))
+        mem_on   = kw.get("memory_enabled", True)
+        depth    = kw.get("memory_depth", 5)
+        history  = self._get_history(kw)
+        past     = self._past(history, depth) if mem_on else []
 
         messages = [SystemMessage(content=sys_text)] + past + [HumanMessage(content=user_input)]
         response = self.llm.invoke(messages).content
@@ -75,9 +79,12 @@ class ZeroShotRunner(BaseRunner):
 
 class FewShotRunner(BaseRunner):
     def run(self, user_input: str, **kw) -> str:
-        """Prepend labelled examples before the user prompt, instructing the model to mirror their format and length."""
+        """Prepend labelled examples before the user prompt, mirroring their format and length."""
         examples = kw.get("examples", [])
-        sys_text  = self._sys(kw.get("custom_sys", ""), kw.get("persona_prompt", ""))
+        sys_text = self._sys(kw.get("custom_sys", ""), kw.get("persona_prompt", ""))
+        mem_on   = kw.get("memory_enabled", True)
+        depth    = kw.get("memory_depth", 5)
+        history  = self._get_history(kw)
 
         if not examples:
             return ZeroShotRunner(self.llm).run(user_input, **kw)
@@ -89,6 +96,8 @@ class FewShotRunner(BaseRunner):
             "Do not add explanations, headers, or extra content beyond what the examples show."
         )
 
+        past = self._past(history, depth) if mem_on else []
+
         ex_prompt = ChatPromptTemplate.from_messages([
             ("human", "{input}"), ("ai", "{output}"),
         ])
@@ -96,25 +105,35 @@ class FewShotRunner(BaseRunner):
             example_prompt=ex_prompt, examples=examples,
         )
         prompt = ChatPromptTemplate.from_messages([
-            ("system", sys_text), fs_block, ("human", "{input}"),
+            ("system", sys_text), fs_block,
+            *[("human" if m.type == "human" else "ai", m.content) for m in past],
+            ("human", "{input}"),
         ])
-        return (prompt | self.llm | StrOutputParser()).invoke({"input": user_input})
+        response = (prompt | self.llm | StrOutputParser()).invoke({"input": user_input})
+        self._save(history, user_input, response)
+        return response
 
 
 class ChainOfThoughtRunner(BaseRunner):
     def run(self, user_input: str, **kw) -> str:
-        """Force the model to reason in numbered steps before answering."""
+        """Force the model to reason in numbered steps before answering, with optional history."""
         steps    = kw.get("cot_steps", 3)
+        mem_on   = kw.get("memory_enabled", True)
+        depth    = kw.get("memory_depth", 5)
+        history  = self._get_history(kw)
+        past     = self._past(history, depth) if mem_on else []
+
         steps_md = "\n".join(f"**Step {i}:** <reasoning>" for i in range(1, steps + 1))
         sys_text = (
             f"You are a careful reasoning assistant. Think through the problem in exactly "
             f"{steps} numbered markdown-bold steps, then state your Final Answer clearly.\n\n"
             f"{steps_md}\n\n✅ **Final Answer:** <concise answer>"
         )
-        return self.llm.invoke([
-            SystemMessage(content=sys_text),
-            HumanMessage(content=user_input),
-        ]).content
+
+        messages = [SystemMessage(content=sys_text)] + past + [HumanMessage(content=user_input)]
+        response = self.llm.invoke(messages).content
+        self._save(history, user_input, response)
+        return response
 
 
 class StructuredOutputRunner(BaseRunner):
@@ -127,17 +146,21 @@ class StructuredOutputRunner(BaseRunner):
 
     def run(self, user_input: str, **kw) -> str:
         """Force a structured JSON response then format it as a readable card."""
+        mem_on  = kw.get("memory_enabled", True)
+        depth   = kw.get("memory_depth", 5)
+        history = self._get_history(kw)
+        past    = self._past(history, depth) if mem_on else []
+
         sys_text = (
             "Reply ONLY with a valid JSON object matching the schema below. "
             "No markdown fences. No preamble. No extra keys.\n\n"
             f"Schema:\n{self._SCHEMA}"
         )
-        raw   = self.llm.invoke([
-            SystemMessage(content=sys_text),
-            HumanMessage(content=user_input),
-        ]).content.strip()
 
-        clean = re.sub(r"```json|```", "", raw).strip()
+        messages = [SystemMessage(content=sys_text)] + past + [HumanMessage(content=user_input)]
+        raw      = self.llm.invoke(messages).content.strip()
+        clean    = re.sub(r"```json|```", "", raw).strip()
+
         try:
             d    = json.loads(clean)
             conf = d.get("confidence", "")
@@ -148,15 +171,17 @@ class StructuredOutputRunner(BaseRunner):
                 "Medium": "The model has partial certainty — verify important details.",
                 "Low":    "The model is uncertain — treat this as a starting point only.",
             }.get(conf, "")
-            return (
-                f"{d.get('answer', '')}\n\n"
-                f"---\n"
+            response = (
+                f"{d.get('answer', '')}\n\n---\n"
                 f"**Confidence** {mark} **{conf}** — _{conf_note}_\n\n"
                 f"**Key Points**\n{pts}\n\n"
                 f"> 💡 **Follow-up:** {d.get('follow_up', '')}"
             )
         except Exception:
-            return raw
+            response = raw
+
+        self._save(history, user_input, response)
+        return response
 
 
 class NeuralChatEngine:
