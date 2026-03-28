@@ -75,12 +75,19 @@ class ZeroShotRunner(BaseRunner):
 
 class FewShotRunner(BaseRunner):
     def run(self, user_input: str, **kw) -> str:
-        """Prepend labelled examples before the user prompt."""
+        """Prepend labelled examples before the user prompt, instructing the model to mirror their format and length."""
         examples = kw.get("examples", [])
         sys_text  = self._sys(kw.get("custom_sys", ""), kw.get("persona_prompt", ""))
 
         if not examples:
             return ZeroShotRunner(self.llm).run(user_input, **kw)
+
+        sys_text = (
+            f"{sys_text}\n\n"
+            "Follow the pattern established by the examples exactly. "
+            "Match the format, length, and style of the example outputs. "
+            "Do not add explanations, headers, or extra content beyond what the examples show."
+        )
 
         ex_prompt = ChatPromptTemplate.from_messages([
             ("human", "{input}"), ("ai", "{output}"),
