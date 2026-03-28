@@ -372,7 +372,9 @@ body{display:flex;position:relative}
   height: 38px;
   border-radius: 10px;
   object-fit: cover;
+  object-position: center;
   flex-shrink: 0;
+  display: block;
 }
 
 .topbar-logo-img {
@@ -380,21 +382,51 @@ body{display:flex;position:relative}
   height: 30px;
   border-radius: 8px;
   object-fit: cover;
+  object-position: center;
   flex-shrink: 0;
+  display: block;
 }
 
 .app-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
   text-align: center;
-  padding: 12px;
-  font-size: 12px;
+  padding: 10px 16px;
+  font-size: 11px;
+  background: linear-gradient(to top, rgba(9,11,22,0.95), transparent);
+  z-index: 50;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.app-footer .footer-dev {
+  color: var(--muted);
+  opacity: 0.5;
+  pointer-events: none;
+  letter-spacing: 0.03em;
+}
+
+.app-footer .footer-sep {
+  color: var(--muted);
+  opacity: 0.3;
+  pointer-events: none;
 }
 
 .app-footer a {
   color: var(--muted);
   text-decoration: none;
-  transition: color 0.2s;
+  transition: color 0.2s, opacity 0.2s;
+  pointer-events: all;
+  opacity: 0.7;
+  font-weight: 500;
 }
 
 .app-footer a:hover {
   color: var(--accent);
+  opacity: 1;
 }
