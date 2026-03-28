@@ -1,18 +1,12 @@
-"""
-engine.py — NeuralChat v5.1
-Pure LangChain engine. Zero UI / Streamlit imports.
-Swap the frontend without touching this file.
-"""
-
 from __future__ import annotations
 
 import json
 import re
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.prompts import (
     ChatPromptTemplate,
     FewShotChatMessagePromptTemplate,
@@ -20,7 +14,6 @@ from langchain_core.prompts import (
 )
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.chat_history import InMemoryChatMessageHistory
-from langchain_core.runnables.history import RunnableWithMessageHistory
 
 from providers import build_llm
 
@@ -49,40 +42,46 @@ class BaseRunner(ABC):
 
     @staticmethod
     def _sys(custom: str, persona: str) -> str:
-        """Return custom system prompt if set, else fall back to persona."""
         return custom.strip() if custom.strip() else persona
+
+    @staticmethod
+    def _history_messages(history: InMemoryChatMessageHistory | None) -> list:
+        """Return messages list from history object, safe if None."""
+        if history is None:
+            return []
+        return history.messages or []
+
+    @staticmethod
+    def _save_turn(
+        history: InMemoryChatMessageHistory | None,
+        user_input: str,
+        ai_response: str,
+    ) -> None:
+        """Manually persist the human/AI turn into history."""
+        if history is None:
+            return
+        history.add_message(HumanMessage(content=user_input))
+        history.add_message(AIMessage(content=ai_response))
 
 
 # ── Runners ───────────────────────────────────────────────────
 
 class ZeroShotRunner(BaseRunner):
     def run(self, user_input: str, **kw) -> str:
-        sys_text   = self._sys(kw.get("custom_sys", ""), kw.get("persona_prompt", ""))
-        mem_on     = kw.get("memory_enabled", True)
-        get_hist   = kw.get("get_history")
-        session_id = kw.get("session_id", "default")
+        sys_text       = self._sys(kw.get("custom_sys", ""), kw.get("persona_prompt", ""))
+        mem_on         = kw.get("memory_enabled", True)
+        get_hist       = kw.get("get_history")
+        session_id     = kw.get("session_id", "default")
 
-        if mem_on and get_hist:
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", sys_text),
-                MessagesPlaceholder(variable_name="history"),
-                ("human", "{input}"),
-            ])
-            chain = RunnableWithMessageHistory(
-                prompt | self.llm | StrOutputParser(),
-                get_hist,
-                input_messages_key="input",
-                history_messages_key="history",
-            )
-            return chain.invoke(
-                {"input": user_input},
-                config={"configurable": {"session_id": session_id}},
-            )
+        history = get_hist(session_id) if (mem_on and get_hist) else None
+        past    = self._history_messages(history)
 
-        return self.llm.invoke([
-            SystemMessage(content=sys_text),
-            HumanMessage(content=user_input),
-        ]).content
+        # Build message list: system + past history + current input
+        messages = [SystemMessage(content=sys_text)] + past + [HumanMessage(content=user_input)]
+        response = self.llm.invoke(messages).content
+
+        self._save_turn(history, user_input, response)
+        return response
 
 
 class FewShotRunner(BaseRunner):
@@ -90,6 +89,7 @@ class FewShotRunner(BaseRunner):
         examples = kw.get("examples", [])
         sys_text  = self._sys(kw.get("custom_sys", ""), kw.get("persona_prompt", ""))
 
+        # Fall back to ZeroShot (with memory) if no examples provided
         if not examples:
             return ZeroShotRunner(self.llm).run(user_input, **kw)
 
@@ -128,21 +128,15 @@ class MemoryChainRunner(BaseRunner):
         get_hist   = kw.get("get_history")
         session_id = kw.get("session_id", "default")
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", sys_text),
-            MessagesPlaceholder(variable_name="history"),
-            ("human", "{input}"),
-        ])
-        chain = RunnableWithMessageHistory(
-            prompt | self.llm | StrOutputParser(),
-            get_hist,
-            input_messages_key="input",
-            history_messages_key="history",
-        )
-        return chain.invoke(
-            {"input": user_input},
-            config={"configurable": {"session_id": session_id}},
-        )
+        # Memory Chain always uses history regardless of memory_enabled toggle
+        history = get_hist(session_id) if get_hist else None
+        past    = self._history_messages(history)
+
+        messages  = [SystemMessage(content=sys_text)] + past + [HumanMessage(content=user_input)]
+        response  = self.llm.invoke(messages).content
+
+        self._save_turn(history, user_input, response)
+        return response
 
 
 class StructuredOutputRunner(BaseRunner):
@@ -177,7 +171,7 @@ class StructuredOutputRunner(BaseRunner):
                 f"> 💡 {d.get('follow_up', '')}"
             )
         except Exception:
-            return raw  # return raw if JSON parse fails
+            return raw
 
 
 # ── Engine ────────────────────────────────────────────────────
@@ -186,10 +180,9 @@ class NeuralChatEngine:
     """
     Public API — completely UI-agnostic.
 
-    Usage:
-        engine = NeuralChatEngine()
-        reply  = engine.chat(user_input, ...)   # → Reply dataclass
-        engine.reset_memory()
+    Memory is managed manually per session_id.
+    Each session has its own InMemoryChatMessageHistory.
+    History is passed directly to the LLM call and updated after each turn.
     """
 
     _RUNNERS: dict[str, type[BaseRunner]] = {
@@ -208,8 +201,11 @@ class NeuralChatEngine:
             self._store[session_id] = InMemoryChatMessageHistory()
         return self._store[session_id]
 
-    def reset_memory(self) -> None:
-        self._store.clear()
+    def reset_memory(self, session_id: str | None = None) -> None:
+        if session_id and session_id in self._store:
+            self._store[session_id].clear()
+        else:
+            self._store.clear()
 
     def chat(
         self,
