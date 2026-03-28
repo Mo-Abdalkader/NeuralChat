@@ -1,83 +1,69 @@
-/**
- * NeuralChat v6.1 — script.js
- * Fixed: models always populate · accordion sidebar · env-var default key
- * Space aurora bg · cursor glow · usage quota · chat history · per-msg download
- */
 "use strict";
 
-/* ═══════════════════════════════════════════
-   CONFIG
-═══════════════════════════════════════════ */
 const CFG = {
-  BASE:         window.location.origin,
-  LIMIT_DEFAULT: 20,          // fallback if /settings doesn't return daily_free_limit
-  LS_STATE:     "nc_v61_state",
-  LS_HIST:      "nc_v61_hist",
-  LS_USAGE:     "nc_v61_usage",
-  // Static fallback provider data used BEFORE /settings loads
-  // so selects are never empty on page load
+  BASE:          window.location.origin,
+  LIMIT_DEFAULT: 20,
+  LS_STATE:      "nc_v62_state",
+  LS_HIST:       "nc_v62_hist",
+  LS_USAGE:      "nc_v62_usage",
+  WRAP_COLS:     70,
+
   PROVIDERS_FALLBACK: {
     Cohere: {
-      models: ["command-a-03-2025","command-r-plus-08-2024","command-r-08-2024","command-r7b-12-2024"],
-      default: "command-a-03-2025", cost: 0.0025, docs: "https://docs.cohere.com/docs/models",
-      tier: '<span class="tier-free">✓ Free tier available (20 req/min)</span>',
+      models:  ["command-a-03-2025","command-r-plus-08-2024","command-r-08-2024","command-r7b-12-2024"],
+      default: "command-a-03-2025", cost: 0.0025,
+      docs:    "https://docs.cohere.com/docs/models",
+      tier:    '<span class="tier-free">✓ Free tier available · 20 req/day shared</span>',
     },
     OpenAI: {
-      models: ["gpt-4.1","gpt-4.1-mini","gpt-4o","gpt-4o-mini"],
-      default: "gpt-4o-mini", cost: 0.0006, docs: "https://platform.openai.com/docs/models",
-      tier: '<span class="tier-pay">⚡ Pay-as-you-go · no free tier</span>',
+      models:  ["gpt-4.1","gpt-4.1-mini","gpt-4o","gpt-4o-mini"],
+      default: "gpt-4o-mini", cost: 0.0006,
+      docs:    "https://platform.openai.com/docs/models",
+      tier:    '<span class="tier-pay">⚡ Pay-as-you-go · no free tier</span>',
     },
     Groq: {
-      models: ["llama-3.3-70b-versatile","llama-3.1-70b-versatile","llama-3.1-8b-instant","gemma2-9b-it"],
-      default: "llama-3.1-8b-instant", cost: 0.00006, docs: "https://console.groq.com/docs/models",
-      tier: '<span class="tier-fast">⚡ Free tier — ultra-fast inference</span>',
+      models:  ["llama-3.3-70b-versatile","llama-3.1-70b-versatile","llama-3.1-8b-instant","gemma2-9b-it"],
+      default: "llama-3.1-8b-instant", cost: 0.00006,
+      docs:    "https://console.groq.com/docs/models",
+      tier:    '<span class="tier-fast">⚡ Free tier — ultra-fast inference</span>',
     },
   },
+
   MODES_INFO: {
     "Zero-Shot": {
       icon:"○", badge:"Direct",
-      desc:"Ask anything directly. The model answers from its training knowledge — no examples or special instructions needed.",
+      desc:"Ask anything directly. The model answers from its knowledge — no examples or special instructions needed.",
       use:"General Q&A, explanations, summaries, brainstorming, code help.",
       example:"Explain how attention mechanisms work in transformers.",
       color:"var(--ac)",
     },
     "Few-Shot": {
       icon:"◈", badge:"Examples",
-      desc:"You provide 2–5 input→output examples first. The model learns the pattern from your examples and applies it to your question.",
-      use:"Classification, SQL generation, email rewriting, format conversion, any task with a clear pattern.",
+      desc:"Provide 2–5 input → output examples first. The model learns the pattern and applies it to your question.",
+      use:"Classification, SQL generation, email rewriting, format conversion.",
       example:'"I love this!" → Positive · then ask: "This product is terrible."',
       color:"var(--vio)",
     },
     "Chain-of-Thought": {
       icon:"◎", badge:"Step-by-Step",
-      desc:"Forces the model to reason through the problem in numbered steps before giving its final answer. Significantly reduces errors on complex problems.",
-      use:"Math problems, logic puzzles, multi-step reasoning, Fermi estimation, debugging.",
+      desc:"Forces the model to reason in numbered steps before its final answer. Reduces errors on complex problems.",
+      use:"Math problems, logic puzzles, multi-step reasoning, debugging.",
       example:"A bat and ball cost $1.10. The bat costs $1 more. How much is the ball?",
       color:"var(--cyan)",
     },
-    "Memory Chain": {
-      icon:"◉", badge:"Memory",
-      desc:"The model maintains full conversation history across all turns. True multi-turn memory — it knows everything said earlier.",
-      use:"Long conversations, tutoring, interviews, progressive tasks, role-play.",
-      example:"My name is Alex. I work with Spark. [later] What should I learn next?",
-      color:"var(--ok)",
-    },
     "Structured Output": {
       icon:"▣", badge:"Structured",
-      desc:"Forces a JSON response with answer, confidence level (High/Medium/Low), key points, and a follow-up question. Perfect for structured data.",
-      use:"Research summaries, dashboards, parseable outputs, analysis reports.",
+      desc:"Returns a formatted card: answer, confidence score with explanation, key points, and a follow-up question.",
+      use:"Research summaries, analysis, reports, parseable outputs.",
       example:"What is containerization and why does it matter?",
       color:"#ec4899",
     },
   },
 };
 
-/* ═══════════════════════════════════════════
-   STATE
-═══════════════════════════════════════════ */
 const S = {
   settings:        null,
-  hasDefaultKey:   false,   // set from /settings response
+  hasDefaultKey:   false,
   dailyLimit:      CFG.LIMIT_DEFAULT,
   provider:        "Cohere",
   model:           "command-a-03-2025",
@@ -87,6 +73,7 @@ const S = {
   maxTokens:       1024,
   cotSteps:        3,
   memoryEnabled:   true,
+  memoryDepth:     5,
   customSysPrompt: "",
   apiKey:          "",
   fsPreset:        "Sentiment Analysis",
@@ -99,103 +86,105 @@ const S = {
   currentHistId:   null,
 };
 
-const PERSIST = ["provider","model","mode","persona","temperature","maxTokens",
-                 "cotSteps","memoryEnabled","customSysPrompt","apiKey","fsPreset","fsCustom"];
+const PERSIST = [
+  "provider","model","mode","persona","temperature","maxTokens",
+  "cotSteps","memoryEnabled","memoryDepth","customSysPrompt","apiKey","fsPreset","fsCustom",
+];
 
-/* ═══════════════════════════════════════════
-   USAGE
-═══════════════════════════════════════════ */
+/* ── Usage ─────────────────────────────────────────────────── */
 const Usage = {
   _today(){ return new Date().toISOString().slice(0,10); },
   _get(){
-    try{ const r=JSON.parse(localStorage.getItem(CFG.LS_USAGE)||"{}"); return r; }catch{return {};}
+    try{ return JSON.parse(localStorage.getItem(CFG.LS_USAGE)||"{}"); }catch{ return {}; }
   },
   count(){
-    const d=this._get(); return d.date===this._today() ? (d.count||0) : 0;
+    const d=this._get(); return d.date===this._today()?(d.count||0):0;
   },
   increment(){
     const today=this._today(), d=this._get();
-    const count = d.date===today ? (d.count||0)+1 : 1;
-    try{localStorage.setItem(CFG.LS_USAGE,JSON.stringify({date:today,count}));}catch{}
+    const count=d.date===today?(d.count||0)+1:1;
+    try{ localStorage.setItem(CFG.LS_USAGE,JSON.stringify({date:today,count})); }catch{}
     return count;
   },
-  limitHit(){ return !S.apiKey && !S.hasDefaultKey && this.count() >= S.dailyLimit; },
-  // When there IS a default key, limit applies to shared usage
-  sharedLimitHit(){ return !S.apiKey && S.hasDefaultKey && this.count() >= S.dailyLimit; },
-  usingOwnKey(){ return !!S.apiKey; },
+  sharedLimitHit(){ return !S.apiKey && S.hasDefaultKey && this.count()>=S.dailyLimit; },
 };
 
-/* ═══════════════════════════════════════════
-   HISTORY
-═══════════════════════════════════════════ */
+/* ── Chat history (localStorage) ───────────────────────────── */
 const Hist = {
-  load(){ try{return JSON.parse(localStorage.getItem(CFG.LS_HIST)||"[]");}catch{return[];} },
-  save(l){ try{localStorage.setItem(CFG.LS_HIST,JSON.stringify(l));}catch{} },
+  load(){ try{ return JSON.parse(localStorage.getItem(CFG.LS_HIST)||"[]"); }catch{ return []; } },
+  save(l){ try{ localStorage.setItem(CFG.LS_HIST,JSON.stringify(l)); }catch{} },
   add(id,title,msgs,cfg){
     const l=this.load(), idx=l.findIndex(h=>h.id===id);
     const e={id,title,date:new Date().toISOString(),messages:msgs,settings:cfg};
-    if(idx>=0)l[idx]=e; else l.unshift(e);
+    if(idx>=0) l[idx]=e; else l.unshift(e);
     this.save(l.slice(0,30));
   },
   del(id){ this.save(this.load().filter(h=>h.id!==id)); },
   get(id){ return this.load().find(h=>h.id===id)||null; },
 };
 
-/* ═══════════════════════════════════════════
-   PERSISTENCE
-═══════════════════════════════════════════ */
+/* ── Persistence ────────────────────────────────────────────── */
 function saveState(){
-  try{ const o={}; PERSIST.forEach(k=>o[k]=S[k]); localStorage.setItem(CFG.LS_STATE,JSON.stringify(o)); }catch{}
+  try{
+    const o={}; PERSIST.forEach(k=>o[k]=S[k]);
+    localStorage.setItem(CFG.LS_STATE,JSON.stringify(o));
+  }catch{}
 }
 function loadState(){
   try{
-    const raw=localStorage.getItem(CFG.LS_STATE); if(!raw)return;
-    const o=JSON.parse(raw); PERSIST.forEach(k=>{if(o[k]!==undefined)S[k]=o[k];});
+    const raw=localStorage.getItem(CFG.LS_STATE); if(!raw) return;
+    const o=JSON.parse(raw); PERSIST.forEach(k=>{ if(o[k]!==undefined) S[k]=o[k]; });
   }catch{}
 }
 
-/* ═══════════════════════════════════════════
-   UTILITIES
-═══════════════════════════════════════════ */
+/* ── Utilities ──────────────────────────────────────────────── */
 const $ = id => document.getElementById(id);
 
-function toast(msg, type="info", ms=2800){
+function toast(msg,type="info",ms=2800){
   const el=document.createElement("div");
   el.className=`toast ${type}`; el.textContent=msg;
   $("toastContainer").appendChild(el);
-  setTimeout(()=>{el.style.opacity="0";setTimeout(()=>el.remove(),300);},ms);
+  setTimeout(()=>{ el.style.opacity="0"; setTimeout(()=>el.remove(),300); },ms);
 }
 function timeNow(){ return new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}); }
-function fmtCost(usd){
-  if(!usd)return""; return usd<0.001?`$${(usd*1000).toFixed(3)}m`:`$${usd.toFixed(5)}`;
-}
+function fmtCost(usd){ if(!usd)return""; return usd<0.001?`$${(usd*1000).toFixed(3)}m`:`$${usd.toFixed(5)}`; }
 function fmtTok(n){ return !n?"":n>=1000?`${(n/1000).toFixed(1)}k tok`:`${n} tok`; }
+
 function scrollBottom(smooth=true){
-  const vp=$("chatViewport"); if(!vp)return;
+  const vp=$("chatViewport"); if(!vp) return;
   vp.scrollTo({top:vp.scrollHeight,behavior:smooth?"smooth":"instant"});
 }
-function activeKey(){
-  // User's own key takes priority; fall back to server default (empty string sent → server resolves)
-  return S.apiKey.trim() || "";  // server-side will use DEFAULT_API_KEY if empty
-}
 function canSend(){
-  if(S.apiKey) return true;         // own key → always OK
-  if(S.hasDefaultKey){
-    return !Usage.sharedLimitHit(); // shared key has daily limit
-  }
-  return false;                     // no key at all
+  if(S.apiKey) return true;
+  if(S.hasDefaultKey) return !Usage.sharedLimitHit();
+  return false;
 }
 
-/* ═══════════════════════════════════════════
-   AURORA BACKGROUND
-═══════════════════════════════════════════ */
+/* Wrap text at word boundaries, max `cols` chars per line. */
+function wrapText(text, cols){
+  const words = text.split(" ");
+  const lines = [];
+  let line    = "";
+  for(const w of words){
+    if((line ? line+" "+w : w).length > cols && line){
+      lines.push(line);
+      line = w;
+    } else {
+      line = line ? line+" "+w : w;
+    }
+  }
+  if(line) lines.push(line);
+  return lines.join("\n");
+}
+
+/* ── Aurora background ──────────────────────────────────────── */
 function initAurora(){
-  const canvas=$("bgCanvas"); if(!canvas)return;
+  const canvas=$("bgCanvas"); if(!canvas) return;
   const ctx=canvas.getContext("2d"); let W,H,t=0;
   const orbs=[
     {x:.2,y:.3,r:.35,hue:240,sp:.0004},{x:.75,y:.6,r:.38,hue:270,sp:.0003},
     {x:.5,y:.1,r:.28,hue:200,sp:.0005},{x:.88,y:.25,r:.26,hue:320,sp:.00035},
-    {x:.1,y:.8, r:.30,hue:180,sp:.00045},
+    {x:.1,y:.8,r:.30,hue:180,sp:.00045},
   ];
   function resize(){ W=canvas.width=window.innerWidth; H=canvas.height=window.innerHeight; }
   window.addEventListener("resize",resize); resize();
@@ -216,12 +205,11 @@ function initAurora(){
       ctx.ellipse(x,y,r*1.4,r,(i*.6+t*o.sp*.3)%(Math.PI*2),0,Math.PI*2);
       ctx.fill();
     });
-    // Random star twinkle
     if(t%3===0){
       ctx.fillStyle="rgba(180,180,255,0.45)";
       for(let i=0;i<3;i++){
-        const sx=Math.random()*W,sy=Math.random()*H,sr=Math.random()*.8+.2;
-        ctx.beginPath();ctx.arc(sx,sy,sr,0,Math.PI*2);ctx.fill();
+        const sx=Math.random()*W, sy=Math.random()*H, sr=Math.random()*.8+.2;
+        ctx.beginPath(); ctx.arc(sx,sy,sr,0,Math.PI*2); ctx.fill();
       }
     }
     requestAnimationFrame(frame);
@@ -229,86 +217,108 @@ function initAurora(){
   frame();
 }
 
-/* ═══════════════════════════════════════════
-   CURSOR GLOW
-═══════════════════════════════════════════ */
+/* ── Cursor glow (smooth trailing) ─────────────────────────── */
 function initCursorGlow(){
-  const g=$("cursorGlow"); if(!g)return;
+  const g=$("cursorGlow"); if(!g) return;
+  let mx=window.innerWidth/2, my=window.innerHeight/2;
+  let cx=mx, cy=my, hue=240, targetHue=240;
   document.addEventListener("mousemove",e=>{
-    g.style.left=e.clientX+"px"; g.style.top=e.clientY+"px";
+    mx=e.clientX; my=e.clientY;
+    targetHue=220+(e.clientX/window.innerWidth)*60;
+  });
+  function animate(){
+    cx+=(mx-cx)*.07; cy+=(my-cy)*.07;
+    hue+=(targetHue-hue)*.05;
+    g.style.left=cx+"px"; g.style.top=cy+"px";
+    g.style.background=`radial-gradient(circle,hsla(${hue},85%,65%,0.09) 0%,hsla(${hue+30},70%,50%,0.04) 40%,transparent 70%)`;
+    requestAnimationFrame(animate);
+  }
+  animate();
+  document.addEventListener("mousedown",()=>{
+    g.style.transform="translate(-50%,-50%) scale(1.6)"; g.style.opacity=".7";
+    setTimeout(()=>{ g.style.transform="translate(-50%,-50%) scale(1)"; g.style.opacity="1"; },300);
   });
 }
 
-/* ═══════════════════════════════════════════
-   MARKDOWN
-═══════════════════════════════════════════ */
+/* ── Markdown renderer ──────────────────────────────────────── */
 const _codeStore={};
 let   _codeIdx=0;
 
 function initMarkdown(){
-  if(typeof marked==="undefined")return;
-  const renderer={
-    code({text,lang}){
-      const sl=(lang||"").toLowerCase().trim()||"text";
-      let hi=text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-      if(typeof hljs!=="undefined"){
-        try{ hi=hljs.getLanguage(sl)?hljs.highlight(text,{language:sl}).value:hljs.highlightAuto(text).value; }catch{}
-      }
-      const idx=_codeIdx++;
-      _codeStore[idx]=text;
-      return `<div class="code-block-wrap"><div class="code-header"><span class="code-lang">${sl}</span><button class="copy-btn" data-ci="${idx}" onclick="App.copyCode(this)">Copy</button></div><pre><code class="hljs language-${sl}">${hi}</code></pre></div>`;
+  if(typeof marked==="undefined") return;
+  marked.use({
+    renderer:{
+      code({text,lang}){
+        const sl=(lang||"").toLowerCase().trim()||"text";
+        let hi=text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+        if(typeof hljs!=="undefined"){
+          try{ hi=hljs.getLanguage(sl)?hljs.highlight(text,{language:sl}).value:hljs.highlightAuto(text).value; }catch{}
+        }
+        const idx=_codeIdx++;
+        _codeStore[idx]=text;
+        return `<div class="code-block-wrap"><div class="code-header"><span class="code-lang">${sl}</span><button class="copy-btn" data-ci="${idx}" onclick="App.copyCode(this)">Copy</button></div><pre><code class="hljs language-${sl}">${hi}</code></pre></div>`;
+      },
     },
-  };
-  marked.use({renderer});
+  });
 }
 
 function renderMd(text){
-  if(typeof marked==="undefined") return text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");
-  try{return marked.parse(text);}catch{return text.replace(/\n/g,"<br>");}
+  if(typeof marked==="undefined")
+    return text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");
+  try{ return marked.parse(text); }catch{ return text.replace(/\n/g,"<br>"); }
 }
 
-/* ═══════════════════════════════════════════
-   API
-═══════════════════════════════════════════ */
+/* ── API calls ──────────────────────────────────────────────── */
 const API={
   async settings(){
-    const r=await fetch(`${CFG.BASE}/settings`); if(!r.ok)throw new Error(`/settings ${r.status}`);
+    const r=await fetch(`${CFG.BASE}/settings`);
+    if(!r.ok) throw new Error(`/settings ${r.status}`);
     return r.json();
   },
   async resetMem(sid){
-    const r=await fetch(`${CFG.BASE}/reset-memory`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(sid?{session_id:sid}:{})});
+    const r=await fetch(`${CFG.BASE}/reset-memory`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(sid?{session_id:sid}:{}),
+    });
     return r.json();
   },
   async stream(payload,onToken,onDone,onError){
     let r;
     try{
-      r=await fetch(`${CFG.BASE}/stream`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-    }catch(e){onError(`Network error: ${e.message}`);return;}
-    if(!r.ok){let d=`HTTP ${r.status}`;try{d=(await r.json()).detail||d;}catch{}onError(d);return;}
-    const reader=r.body.getReader(),dec=new TextDecoder();
+      r=await fetch(`${CFG.BASE}/stream`,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(payload),
+      });
+    }catch(e){ onError(`Network error: ${e.message}`); return; }
+    if(!r.ok){
+      let d=`HTTP ${r.status}`;
+      try{ d=(await r.json()).detail||d; }catch{}
+      onError(d); return;
+    }
+    const reader=r.body.getReader(), dec=new TextDecoder();
     let buf="";
     while(true){
-      let ch; try{ch=await reader.read();}catch{break;}
-      if(ch.done)break;
+      let ch; try{ ch=await reader.read(); }catch{ break; }
+      if(ch.done) break;
       buf+=dec.decode(ch.value,{stream:true});
       const lines=buf.split("\n"); buf=lines.pop();
       for(const line of lines){
-        if(!line.startsWith("data: "))continue;
-        const raw=line.slice(6).trim(); if(!raw)continue;
+        if(!line.startsWith("data: ")) continue;
+        const raw=line.slice(6).trim(); if(!raw) continue;
         try{
           const ev=JSON.parse(raw);
-          if(ev.type==="token")onToken(ev.content);
-          else if(ev.type==="done")onDone(ev);
-          else if(ev.type==="error")onError(ev.message);
+          if(ev.type==="token")  onToken(ev.content);
+          else if(ev.type==="done")  onDone(ev);
+          else if(ev.type==="error") onError(ev.message);
         }catch{}
       }
     }
   },
 };
 
-/* ═══════════════════════════════════════════
-   DOM BUILDERS
-═══════════════════════════════════════════ */
+/* ── DOM builders ───────────────────────────────────────────── */
 const DOM={
 
   buildWelcome(){
@@ -316,20 +326,18 @@ const DOM={
     const chips=Object.keys(modes).map(k=>`<span class="welcome-mode">${(modes[k].icon||CFG.MODES_INFO[k]?.icon||"")} ${k}</span>`).join("");
     const hint=CFG.MODES_INFO[S.mode]?.use||"";
     const div=document.createElement("div");
-    div.className="welcome";div.id="welcomeScreen";
+    div.className="welcome"; div.id="welcomeScreen";
     div.innerHTML=`<div class="welcome-glyph">◈</div><h2 class="welcome-title">Start a conversation</h2><p class="welcome-sub">${S.mode} · ${S.persona}</p><div class="welcome-modes">${chips}</div>${hint?`<p class="welcome-hint">${hint}</p>`:""}`;
     return div;
   },
 
   buildUserMsg(content,time){
-    const safe=content
-      .replace(/&/g,"&amp;")
-      .replace(/</g,"&lt;")
-      .replace(/>/g,"&gt;")
-      .replace(/\n+/g," ")   // collapse newlines → single space
-      .trim();
+    const wrapped=wrapText(
+      content.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n+/g," ").trim(),
+      CFG.WRAP_COLS
+    ).replace(/\n/g,"<br>");
     const g=document.createElement("div"); g.className="msg-group";
-    g.innerHTML=`<div class="user-row"><div><div class="user-bubble">${safe}</div><div class="user-ts">${time}</div></div></div>`;
+    g.innerHTML=`<div class="user-row"><div class="user-msg-wrap"><div class="user-bubble">${wrapped}</div><div class="user-ts">${time}</div></div></div>`;
     return g;
   },
 
@@ -340,13 +348,26 @@ const DOM={
     const cost=msg.costUsd   ?`<span class="meta-pill"><svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>${fmtCost(msg.costUsd)}</span>`:"";
     const midx=S.messages.length;
     const g=document.createElement("div"); g.className="msg-group";
-    g.innerHTML=`<div class="ai-row"><div class="ai-avatar">N</div><div class="ai-bubble"><div class="ai-content">${html}</div><div class="ai-footer"><span class="ai-mode-tag">${msg.mode||S.mode}</span><div class="ai-meta">${tok}${lat}${cost}</div><button class="ai-dl-btn" onclick="App.dlMsg(${midx})"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Save</button><span style="color:var(--t4)">${msg.time}</span></div></div></div>`;
+    g.innerHTML=`
+      <div class="ai-row">
+        <div class="ai-avatar"><img src="/static/logo.png" alt="AI" class="ai-avatar-img" onerror="this.parentElement.textContent='N'"/></div>
+        <div class="ai-bubble">
+          <div class="ai-content">${html}</div>
+          <div class="ai-footer">
+            <span class="ai-mode-tag">${msg.mode||S.mode}</span>
+            <div class="ai-meta">${tok}${lat}${cost}</div>
+            <button class="ai-dl-btn" onclick="App.dlMsg(${midx})"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Save</button>
+            <span style="color:var(--t4)">${msg.time}</span>
+          </div>
+        </div>
+      </div>`;
+    setTimeout(()=>{ if(typeof hljs!=="undefined") g.querySelectorAll("pre code").forEach(b=>hljs.highlightElement(b)); },0);
     return g;
   },
 
   buildThinking(){
     const g=document.createElement("div"); g.id="thinkingRow"; g.className="thinking-row";
-    g.innerHTML=`<div class="ai-avatar">N</div><div class="thinking-bubble"><div class="dots"><span></span><span></span><span></span></div></div>`;
+    g.innerHTML=`<div class="ai-avatar"><img src="/static/logo.png" alt="AI" class="ai-avatar-img" onerror="this.parentElement.textContent='N'"/></div><div class="thinking-bubble"><div class="dots"><span></span><span></span><span></span></div><span class="thinking-label">${S.provider} is thinking…</span></div>`;
     return g;
   },
 
@@ -358,37 +379,34 @@ const DOM={
     const bubble=document.createElement("div"); bubble.className="ai-bubble";
     bubble.appendChild(content); bubble.appendChild(footer);
     const row=document.createElement("div"); row.className="ai-row";
-    row.innerHTML=`<div class="ai-avatar">N</div>`; row.appendChild(bubble); g.appendChild(row);
+    const av=document.createElement("div"); av.className="ai-avatar";
+    av.innerHTML=`<img src="/static/logo.png" alt="AI" class="ai-avatar-img" onerror="this.parentElement.textContent='N'"/>`;
+    row.appendChild(av); row.appendChild(bubble); g.appendChild(row);
     return {group:g,content,footer};
   },
 
-  // Populate provider select — static fallback used immediately
   populateProviders(current){
-    const sel=$("providerSel"); if(!sel)return;
-    const names=Object.keys(CFG.PROVIDERS_FALLBACK);
-    sel.innerHTML=names.map(k=>`<option value="${k}"${k===current?" selected":""}>${k}</option>`).join("");
+    const sel=$("providerSel"); if(!sel) return;
+    sel.innerHTML=Object.keys(CFG.PROVIDERS_FALLBACK).map(k=>`<option value="${k}"${k===current?" selected":""}>${k}</option>`).join("");
   },
 
-  // Populate model select for a given provider — always ensures a valid selection
-  populateModels(provider, current){
-    const sel=$("modelSel"); if(!sel)return;
+  populateModels(provider,current){
+    const sel=$("modelSel"); if(!sel) return;
     const p=CFG.PROVIDERS_FALLBACK[provider];
     const models=(S.settings?.providers?.[provider]?.models)||p?.models||[];
-    if(!models.length)return;
-    // If saved model is stale (not in list), fall back to provider default
-    const validCurrent = models.includes(current) ? current : (p?.default || models[0]);
-    // Update state too so topbar stays in sync
-    S.model = validCurrent;
-    sel.innerHTML=models.map(m=>`<option value="${m}"${m===validCurrent?" selected":""}>${m}</option>`).join("");
+    if(!models.length) return;
+    const valid=models.includes(current)?current:(p?.default||models[0]);
+    S.model=valid;
+    sel.innerHTML=models.map(m=>`<option value="${m}"${m===valid?" selected":""}>${m}</option>`).join("");
   },
 
   populatePersonas(personas,current){
-    const sel=$("personaSel"); if(!sel)return;
+    const sel=$("personaSel"); if(!sel) return;
     sel.innerHTML=Object.entries(personas).map(([k,v])=>`<option value="${k}"${k===current?" selected":""}>${v.icon} ${k}</option>`).join("");
   },
 
   buildModePills(current){
-    const wrap=$("modePills"); if(!wrap)return;
+    const wrap=$("modePills"); if(!wrap) return;
     wrap.innerHTML=Object.keys(CFG.MODES_INFO).map(key=>{
       const m=CFG.MODES_INFO[key];
       return `<button class="mode-pill${key===current?" active":""}" data-mode="${key}" onclick="App.selectMode('${key}')">${m.icon} ${key}</button>`;
@@ -396,8 +414,8 @@ const DOM={
   },
 
   buildModeGuide(mode){
-    const wrap=$("modeGuideInline"); if(!wrap)return;
-    const m=CFG.MODES_INFO[mode]; if(!m){wrap.innerHTML="";return;}
+    const wrap=$("modeGuideInline"); if(!wrap) return;
+    const m=CFG.MODES_INFO[mode]; if(!m){ wrap.innerHTML=""; return; }
     wrap.innerHTML=`<div class="mode-guide-card">
       <div class="mgc-head">
         <span class="mgc-icon">${m.icon}</span>
@@ -411,9 +429,9 @@ const DOM={
   },
 
   buildModePanel(mode){
-    const wrap=$("modeOptions"); if(!wrap){wrap&&(wrap.innerHTML="");return;}
+    const wrap=$("modeOptions"); if(!wrap) return;
     wrap.innerHTML="";
-    if(mode==="Few-Shot") wrap.appendChild(DOM._fewShotPanel());
+    if(mode==="Few-Shot")         wrap.appendChild(DOM._fewShotPanel());
     else if(mode==="Chain-of-Thought") wrap.appendChild(DOM._cotPanel());
   },
 
@@ -421,8 +439,12 @@ const DOM={
     const presets=S.settings?.few_shot_presets||{};
     const examples=S.fsPreset==="Custom"?S.fsCustom:(presets[S.fsPreset]?.examples||[]);
     const chips=Object.keys(presets).map(k=>`<button class="fs-chip${k===S.fsPreset?" active":""}" onclick="App.selFsPreset('${k}')">${k}</button>`).join("");
-    const cards=examples.length?examples.map(e=>`<div class="fs-card"><div class="fs-lbl">Input</div><div class="fs-val">${e.input.replace(/</g,"&lt;")}</div><div class="fs-lbl" style="margin-top:4px">Output</div><div class="fs-val out">${e.output.replace(/</g,"&lt;").replace(/\n/g,"<br>")}</div></div>`).join(""):`<div class="fs-empty">No examples yet</div>`;
-    const addForm=S.fsPreset==="Custom"?`<div class="fs-add"><input class="nc-input" id="fsInp" placeholder="User input" autocomplete="off"/><input class="nc-input" id="fsOut" placeholder="Model output" autocomplete="off" style="margin-top:5px"/><div class="fs-add-btns"><button class="nc-btn-ghost" onclick="App.addFsEx()">Add</button><button class="nc-btn-ghost" onclick="App.clearFsEx()" style="color:var(--err);border-color:rgba(239,68,68,.3)">Clear all</button></div></div>`:"";
+    const cards=examples.length
+      ?examples.map(e=>`<div class="fs-card"><div class="fs-lbl">Input</div><div class="fs-val">${e.input.replace(/</g,"&lt;")}</div><div class="fs-lbl" style="margin-top:4px">Output</div><div class="fs-val out">${e.output.replace(/</g,"&lt;").replace(/\n/g,"<br>")}</div></div>`).join("")
+      :`<div class="fs-empty">No examples yet</div>`;
+    const addForm=S.fsPreset==="Custom"
+      ?`<div class="fs-add"><input class="nc-input" id="fsInp" placeholder="User input" autocomplete="off"/><input class="nc-input" id="fsOut" placeholder="Model output" autocomplete="off" style="margin-top:5px"/><div class="fs-add-btns"><button class="nc-btn-ghost" onclick="App.addFsEx()">Add</button><button class="nc-btn-ghost" onclick="App.clearFsEx()" style="color:var(--err);border-color:rgba(239,68,68,.3)">Clear all</button></div></div>`
+      :"";
     const div=document.createElement("div"); div.className="mode-panel";
     div.innerHTML=`<div class="field-lbl">Examples</div><div class="fs-presets-row">${chips}</div><div class="fs-examples">${cards}</div>${addForm}`;
     return div;
@@ -435,9 +457,9 @@ const DOM={
   },
 
   buildHistoryList(){
-    const wrap=$("historyList"); if(!wrap)return;
+    const wrap=$("historyList"); if(!wrap) return;
     const list=Hist.load();
-    if(!list.length){wrap.innerHTML=`<div class="history-empty">No saved conversations</div>`;return;}
+    if(!list.length){ wrap.innerHTML=`<div class="history-empty">No saved conversations</div>`; return; }
     wrap.innerHTML=list.map(h=>{
       const d=new Date(h.date);
       const active=h.id===S.currentHistId?" active":"";
@@ -451,17 +473,28 @@ const DOM={
       </div>`;
     }).join("");
   },
+
+  /* Rebuild the memory depth slider inside the memory accordion. */
+  buildMemoryPanel(){
+    const wrap=$("memoryPanel"); if(!wrap) return;
+    wrap.innerHTML=`
+      <div class="field-group" style="margin-top:8px">
+        <div class="field-lbl">History depth <span class="param-val" id="depthVal">${S.memoryDepth} pairs</span></div>
+        <input type="range" class="nc-slider" id="depthSlider" min="1" max="20" step="1" value="${S.memoryDepth}"
+          oninput="App.onDepthChange(this.value)"/>
+        <div class="slider-labels"><span>1 pair</span><span>20 pairs</span></div>
+        <div class="field-opt" style="margin-top:4px">How many past message pairs the AI can see</div>
+      </div>`;
+  },
 };
 
-/* ═══════════════════════════════════════════
-   CHAT
-═══════════════════════════════════════════ */
+/* ── Chat ───────────────────────────────────────────────────── */
 const Chat={
   appendUser(text){
     const time=timeNow();
     S.messages.push({role:"user",content:text,time,mode:"",tokens:0,latencyMs:0,costUsd:0});
-    const msgs=$("chatMessages"); if(!msgs)return;
-    const ws=$("welcomeScreen"); if(ws)ws.remove();
+    const msgs=$("chatMessages"); if(!msgs) return;
+    const ws=$("welcomeScreen"); if(ws) ws.remove();
     msgs.appendChild(DOM.buildUserMsg(text,time));
     scrollBottom();
   },
@@ -475,10 +508,15 @@ const Chat={
     Chat.removeThinking(); scrollBottom();
     let acc="";
 
-    const onToken=c=>{ acc+=c; content.innerHTML=renderMd(acc); scrollBottom(false); };
+    const onToken=c=>{
+      acc+=c;
+      content.innerHTML=renderMd(acc);
+      scrollBottom(false);
+    };
 
     const onDone=meta=>{
       content.classList.remove("stream-cursor");
+      if(typeof hljs!=="undefined") content.querySelectorAll("pre code").forEach(b=>hljs.highlightElement(b));
       const tok =meta.tokens    ?`<span class="meta-pill"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>${fmtTok(meta.tokens)}</span>`:"";
       const lat =meta.latency_ms?`<span class="meta-pill"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${(meta.latency_ms/1000).toFixed(2)}s</span>`:"";
       const cost=meta.cost_usd  ?`<span class="meta-pill"><svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>${fmtCost(meta.cost_usd)}</span>`:"";
@@ -504,213 +542,179 @@ const Chat={
   },
 
   autoSave(){
-    if(!S.messages.length)return;
-    const t=S.messages.find(m=>m.role==="user")?.content.substring(0,50)||"Conversation";
-    Hist.add(S.sessionId,t,S.messages,{provider:S.provider,model:S.model,mode:S.mode,persona:S.persona});
+    if(!S.messages.length) return;
+    const title=S.messages.find(m=>m.role==="user")?.content.substring(0,50)||"Conversation";
+    Hist.add(S.sessionId,title,S.messages,{provider:S.provider,model:S.model,mode:S.mode,persona:S.persona});
     S.currentHistId=S.sessionId;
     DOM.buildHistoryList();
   },
 
   clear(){
     S.messages=[]; S.totalTokens=0; S.totalCost=0;
-    const msgs=$("chatMessages"); if(msgs){msgs.innerHTML="";msgs.appendChild(DOM.buildWelcome());}
+    const msgs=$("chatMessages");
+    if(msgs){ msgs.innerHTML=""; msgs.appendChild(DOM.buildWelcome()); }
     UI.updateStats();
   },
 };
 
-/* ═══════════════════════════════════════════
-   UI SYNC
-═══════════════════════════════════════════ */
+/* ── UI sync ────────────────────────────────────────────────── */
 const UI={
   setSending(v){
-    const btn=$("sendBtn"); if(btn)btn.disabled=v;
-    const dot=$("statusDot"); if(dot)dot.className=`status-dot ${v?"loading":"online"}`;
+    const btn=$("sendBtn"); if(btn) btn.disabled=v;
+    const dot=$("statusDot"); if(dot) dot.className=`status-dot ${v?"loading":"online"}`;
   },
 
   updateTopbar(){
-    const m=$("topbarMode"); if(m)m.textContent=S.mode;
-    const mo=$("topbarModel"); if(mo)mo.textContent=`${S.provider} · ${S.model}`;
-    const b=$("inputModeBadge"); if(b)b.textContent=S.mode;
-    const ta=$("msgInput"); if(ta)ta.placeholder=`Message  ·  ${S.mode}  ·  ${S.persona}`;
+    const m=$("topbarMode");   if(m)  m.textContent=S.mode;
+    const mo=$("topbarModel"); if(mo) mo.textContent=`${S.provider} · ${S.model}`;
+    const b=$("inputModeBadge"); if(b) b.textContent=S.mode;
+    const ta=$("msgInput"); if(ta) ta.placeholder=`Message  ·  ${S.mode}  ·  ${S.persona}`;
   },
 
   updateInputHint(){
     const pool=S.settings?.example_prompts?.[S.mode]||[];
     const el=$("inputHint");
-    if(el)el.textContent=pool.length?`↳ ${pool.slice(0,2).map(p=>`"${p.substring(0,44)}"`).join("  ·  ")}`:"";
+    if(el) el.textContent=pool.length?`↳ ${pool.slice(0,2).map(p=>`"${p.substring(0,44)}"`).join("  ·  ")}`:"";
   },
 
   updateWelcome(){
-    const ws=$("welcomeScreen"); if(!ws)return;
-    const sub=ws.querySelector(".welcome-sub"); if(sub)sub.textContent=`${S.mode} · ${S.persona}`;
-    const hint=ws.querySelector(".welcome-hint"); if(hint)hint.textContent=CFG.MODES_INFO[S.mode]?.use||"";
+    const ws=$("welcomeScreen"); if(!ws) return;
+    const sub=ws.querySelector(".welcome-sub"); if(sub) sub.textContent=`${S.mode} · ${S.persona}`;
+    const hint=ws.querySelector(".welcome-hint"); if(hint) hint.textContent=CFG.MODES_INFO[S.mode]?.use||"";
   },
 
   updateStats(){
     const has=S.messages.length>0;
-    const f=$("sbFooter"); if(f)f.className=`sb-footer${has?" visible":""}`;
+    const f=$("sbFooter"); if(f) f.className=`sb-footer${has?" visible":""}`;
     if(has){
-      const m=$("statMsgs"); if(m)m.textContent=S.messages.length;
-      const t=$("statTok");  if(t)t.textContent=`~${S.totalTokens.toLocaleString()}`;
-      const c=$("statCost"); if(c)c.textContent=fmtCost(S.totalCost)||"$0.00";
+      const m=$("statMsgs"); if(m) m.textContent=S.messages.length;
+      const t=$("statTok");  if(t) t.textContent=`~${S.totalTokens.toLocaleString()}`;
+      const c=$("statCost"); if(c) c.textContent=fmtCost(S.totalCost)||"$0.00";
     }
-    const n=S.messages.length, pct=Math.min(100,(n/30)*100);
-    const bar=$("memBarFill"); if(bar)bar.style.width=`${pct}%`;
-    const txt=$("memStatusText"); if(txt)txt.textContent=`${S.memoryEnabled?"Active":"Off"} · ${n} messages`;
-    const dot=$("memDot"); if(dot)dot.className=`mem-dot${S.memoryEnabled?" active":""}`;
+    const n=S.messages.length;
+    const bar=$("memBarFill"); if(bar) bar.style.width=`${Math.min(100,(n/(S.memoryDepth*2))*100)}%`;
+    const txt=$("memStatusText");
+    if(txt) txt.textContent=`${S.memoryEnabled?"Active":"Off"} · ${n} messages · depth ${S.memoryDepth} pairs`;
+    const dot=$("memDot"); if(dot) dot.className=`mem-dot${S.memoryEnabled?" active":""}`;
   },
 
   updateProviderUI(){
     const p=CFG.PROVIDERS_FALLBACK[S.provider];
-    const tier=$("providerTier"); if(tier)tier.innerHTML=p?.tier||"";
-    const cost=$("modelCost");    if(cost)cost.textContent=p?`≈ $${p.cost.toFixed(4)} / 1k tokens`:"";
+    const tier=$("providerTier"); if(tier) tier.innerHTML=p?.tier||"";
+    const cost=$("modelCost");    if(cost) cost.textContent=p?`≈ $${p.cost.toFixed(4)} / 1k tokens`:"";
     const docs=$("keyDocs");
-    if(docs&&p)docs.innerHTML=`Get key → <a href="${p.docs}" target="_blank" rel="noopener">${p.docs.replace("https://","")}</a>`;
+    if(docs&&p) docs.innerHTML=`Get key → <a href="${p.docs}" target="_blank" rel="noopener">${p.docs.replace("https://","")}</a>`;
   },
 
   updateUsage(){
     const count=Usage.count(), limit=S.dailyLimit;
     const pct=Math.min(100,(count/limit)*100);
-    const uc=$("usageCount"); if(uc)uc.textContent=`${count} / ${limit}`;
+    const uc=$("usageCount"); if(uc) uc.textContent=`${count} / ${limit}`;
     const uf=$("usageFill");
     if(uf){
       uf.style.width=`${pct}%`;
       uf.style.background=pct>=100?"linear-gradient(90deg,var(--err),#ff6b6b)":pct>=80?"linear-gradient(90deg,var(--wrn),var(--err))":"linear-gradient(90deg,var(--ac),var(--vio))";
     }
-
-    // Hide usage bar if user has own key
-    const uw=$("usageWrap"); if(uw)uw.style.display=S.apiKey?"none":"block";
-
-    // Key status label
+    const uw=$("usageWrap"); if(uw) uw.style.display=S.apiKey?"none":"block";
     const ks=$("keyStatus");
     if(ks){
       if(S.apiKey){
         ks.className="key-status using-own"; ks.textContent="✓ Using your own key — unlimited access";
       } else if(S.hasDefaultKey){
-        ks.className="key-status using-shared"; ks.textContent=`Using shared key — ${Math.max(0,limit-count)} / ${limit} free requests remaining today`;
+        ks.className="key-status using-shared";
+        ks.textContent=`Shared key — ${Math.max(0,limit-count)} / ${limit} free requests remaining today`;
       } else {
         ks.className="key-status"; ks.textContent="";
       }
     }
-
-    // Banner
     const banner=$("apiBanner");
     if(banner){
       if(Usage.sharedLimitHit()){
         banner.className="api-banner visible";
-        const t=$("bannerTitle"); if(t)t.textContent="Daily free limit reached";
-        const sb=$("bannerSub"); if(sb)sb.textContent="Add your own API key below to continue";
+        const t=$("bannerTitle"); if(t) t.textContent="Daily limit reached";
+        const sb=$("bannerSub"); if(sb) sb.textContent="Add your own API key below to continue";
       } else if(!S.hasDefaultKey&&!S.apiKey){
         banner.className="api-banner visible";
-        const t=$("bannerTitle"); if(t)t.textContent="No API key";
-        const sb=$("bannerSub"); if(sb)sb.textContent="Enter your API key to start chatting";
+        const t=$("bannerTitle"); if(t) t.textContent="No API key";
+        const sb=$("bannerSub"); if(sb) sb.textContent="Enter your API key to start chatting";
       } else {
         banner.className="api-banner";
       }
     }
-
     const dot=$("statusDot");
     if(dot&&!S.streaming) dot.className=`status-dot ${canSend()?"online":"error"}`;
   },
 
   updatePersonaTip(){
     const p=S.settings?.personas?.[S.persona];
-    const el=$("personaTip"); if(el)el.textContent=p?.tip||"";
+    const el=$("personaTip"); if(el) el.textContent=p?.tip||"";
   },
 
   syncSliders(){
-    const ts=$("tempSlider");   if(ts)ts.value=S.temperature;
-    const tv=$("tempVal");      if(tv)tv.textContent=parseFloat(S.temperature).toFixed(2);
-    const ms=$("maxTokSlider"); if(ms)ms.value=S.maxTokens;
-    const mv=$("maxTokVal");    if(mv)mv.textContent=S.maxTokens;
-    const mt=$("memoryToggle"); if(mt)mt.checked=S.memoryEnabled;
-    const sp=$("customSysPrompt"); if(sp)sp.value=S.customSysPrompt;
+    const ts=$("tempSlider");   if(ts) ts.value=S.temperature;
+    const tv=$("tempVal");      if(tv) tv.textContent=parseFloat(S.temperature).toFixed(2);
+    const ms=$("maxTokSlider"); if(ms) ms.value=S.maxTokens;
+    const mv=$("maxTokVal");    if(mv) mv.textContent=S.maxTokens;
+    const mt=$("memoryToggle"); if(mt) mt.checked=S.memoryEnabled;
+    const sp=$("customSysPrompt"); if(sp) sp.value=S.customSysPrompt;
   },
 };
 
-/* ═══════════════════════════════════════════
-   ACCORDION
-═══════════════════════════════════════════ */
+/* ── Accordion init ─────────────────────────────────────────── */
 function initAccordions(){
-  // Open Model & Mode by default; others closed
   ["acc-model","acc-mode"].forEach(id=>{
-    const el=$(id); if(el)el.classList.add("open");
+    const el=$(id); if(el) el.classList.add("open");
   });
 }
 
-/* ═══════════════════════════════════════════
-   APP CONTROLLER
-═══════════════════════════════════════════ */
+/* ── App controller ─────────────────────────────────────────── */
 const App={
 
   async init(){
     loadState();
+    const p0=CFG.PROVIDERS_FALLBACK[S.provider];
+    if(p0?.models?.length && !p0.models.includes(S.model)) S.model=p0.default||p0.models[0];
 
-    // ── Clear stale model if it's no longer valid for saved provider ──
-    const p0 = CFG.PROVIDERS_FALLBACK[S.provider];
-    const m0  = p0?.models || [];
-    if(m0.length && !m0.includes(S.model)){
-      S.model = p0?.default || m0[0];
-    }
-    initMarkdown();
-    initAurora();
-    initCursorGlow();
-    initAccordions();
+    initMarkdown(); initAurora(); initCursorGlow(); initAccordions();
 
-    // 1. Populate selects immediately from static fallback (never empty on load)
     DOM.populateProviders(S.provider);
-    DOM.populateModels(S.provider, S.model);
-
-    // 2. Build mode pills + guide from static config
+    DOM.populateModels(S.provider,S.model);
     DOM.buildModePills(S.mode);
     DOM.buildModeGuide(S.mode);
     DOM.buildModePanel(S.mode);
+    DOM.buildMemoryPanel();
 
-    // 3. Welcome screen
-    const msgs=$("chatMessages"); if(msgs)msgs.appendChild(DOM.buildWelcome());
+    const msgs=$("chatMessages"); if(msgs) msgs.appendChild(DOM.buildWelcome());
 
-    // 4. Sync all UI state
-    UI.setSending(false);
-    UI.syncSliders();
-    const ki=$("apiKeyInput"); if(ki)ki.value=S.apiKey;
-    UI.updateTopbar();
-    UI.updateProviderUI();
-    UI.updateInputHint();
-    UI.updateStats();
-    DOM.buildHistoryList();
+    UI.setSending(false); UI.syncSliders();
+    const ki=$("apiKeyInput"); if(ki) ki.value=S.apiKey;
+    UI.updateTopbar(); UI.updateProviderUI(); UI.updateInputHint();
+    UI.updateStats(); DOM.buildHistoryList();
 
-    // 5. Load /settings from API (enriches data; doesn't block UI)
     try{
       const settings=await API.settings();
       S.settings=settings;
-      S.hasDefaultKey  = settings.has_default_key  || false;
-      S.dailyLimit     = settings.daily_free_limit  || CFG.LIMIT_DEFAULT;
+      S.hasDefaultKey = settings.has_default_key||false;
+      S.dailyLimit    = settings.daily_free_limit||CFG.LIMIT_DEFAULT;
 
-      // Re-validate provider/model against server list
       if(!settings.providers[S.provider]) S.provider=settings.active_provider;
       const pMods=settings.providers[S.provider]?.models||[];
       if(!pMods.includes(S.model)) S.model=settings.providers[S.provider]?.default_model||pMods[0]||S.model;
 
-      // Refresh selects with authoritative server data
       DOM.populateProviders(S.provider);
       DOM.populateModels(S.provider,S.model);
       DOM.populatePersonas(settings.personas,S.persona);
-
-      UI.updateTopbar();
-      UI.updateProviderUI();
-      UI.updateInputHint();
-      UI.updatePersonaTip();
+      UI.updateTopbar(); UI.updateProviderUI(); UI.updateInputHint(); UI.updatePersonaTip();
     }catch(err){
       toast(`Cannot reach API: ${err.message}`,"error",6000);
-      // Still try to populate persona select from hardcoded fallback
       DOM.populatePersonas({
-        Assistant:{icon:"🤖",tip:"Balanced general-purpose responses."},
-        Engineer: {icon:"💻",tip:"Production code with explanations."},
-        Analyst:  {icon:"📊",tip:"Deep, structured, evidence-based answers."},
-        Writer:   {icon:"✍️",tip:"Expressive narrative responses."},
-        Teacher:  {icon:"🎓",tip:"Teaches by asking, not telling."},
-        "Data Scientist":{icon:"📈",tip:"Analytical and quantitative focus."},
-      }, S.persona);
+        Assistant:{"icon":"🤖","tip":"Balanced general-purpose responses."},
+        Engineer: {"icon":"💻","tip":"Production code with explanations."},
+        Analyst:  {"icon":"📊","tip":"Deep, structured, evidence-based answers."},
+        Writer:   {"icon":"✍️","tip":"Expressive narrative responses."},
+        Teacher:  {"icon":"🎓","tip":"Teaches by asking, not telling."},
+        "Data Scientist":{"icon":"📈","tip":"Analytical and quantitative focus."},
+      },S.persona);
     }
 
     UI.updateUsage();
@@ -718,24 +722,18 @@ const App={
   },
 
   _globalKey(e){
-    if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key==="N"){e.preventDefault();App.newChat();}
-    if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key==="E"){e.preventDefault();App.exportChat();}
+    if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key==="N"){ e.preventDefault(); App.newChat(); }
+    if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key==="E"){ e.preventDefault(); App.exportChat(); }
   },
 
-  /* Accordion */
-  toggleAcc(id){
-    const el=$(id); if(!el)return;
-    el.classList.toggle("open");
-  },
+  toggleAcc(id){ const el=$(id); if(el) el.classList.toggle("open"); },
 
-  /* Provider/Model */
   onProviderChange(){
     S.provider=$("providerSel")?.value||S.provider;
-    // Always reset to provider's default model on provider switch
     const p=CFG.PROVIDERS_FALLBACK[S.provider];
     const mods=(S.settings?.providers?.[S.provider]?.models)||p?.models||[];
-    S.model = p?.default || mods[0] || S.model;
-    DOM.populateModels(S.provider, S.model);
+    S.model=p?.default||mods[0]||S.model;
+    DOM.populateModels(S.provider,S.model);
     UI.updateTopbar(); UI.updateProviderUI(); saveState();
   },
   onModelChange(){
@@ -743,90 +741,83 @@ const App={
     UI.updateTopbar(); saveState();
   },
 
-  /* Mode */
   selectMode(key){
     S.mode=key;
     document.querySelectorAll(".mode-pill").forEach(p=>p.classList.toggle("active",p.dataset.mode===key));
-    DOM.buildModeGuide(key);
-    DOM.buildModePanel(key);
+    DOM.buildModeGuide(key); DOM.buildModePanel(key);
     UI.updateTopbar(); UI.updateWelcome(); UI.updateInputHint(); saveState();
   },
 
-  /* Persona */
   onPersonaChange(){
     S.persona=$("personaSel")?.value||S.persona;
     UI.updatePersonaTip(); UI.updateWelcome(); UI.updateInputHint(); saveState();
   },
 
-  /* Sliders */
-  onTempChange(v){ S.temperature=parseFloat(v); const e=$("tempVal"); if(e)e.textContent=parseFloat(v).toFixed(2); saveState(); },
-  onMaxTokChange(v){ S.maxTokens=parseInt(v,10); const e=$("maxTokVal"); if(e)e.textContent=v; saveState(); },
-  onCotChange(v){ S.cotSteps=parseInt(v,10); const e=$("cotVal"); if(e)e.textContent=v; saveState(); },
+  onTempChange(v){    S.temperature=parseFloat(v);  const e=$("tempVal");   if(e) e.textContent=parseFloat(v).toFixed(2); saveState(); },
+  onMaxTokChange(v){  S.maxTokens=parseInt(v,10);   const e=$("maxTokVal"); if(e) e.textContent=v; saveState(); },
+  onCotChange(v){     S.cotSteps=parseInt(v,10);    const e=$("cotVal");    if(e) e.textContent=v; saveState(); },
+  onDepthChange(v){
+    S.memoryDepth=parseInt(v,10);
+    const e=$("depthVal"); if(e) e.textContent=`${v} pairs`;
+    UI.updateStats(); saveState();
+  },
 
-  /* Memory */
-  onMemoryChange(){ S.memoryEnabled=$("memoryToggle")?.checked??true; UI.updateStats(); saveState(); },
+  onMemoryChange(){
+    S.memoryEnabled=$("memoryToggle")?.checked??true;
+    UI.updateStats(); saveState();
+  },
   async resetMemory(){
     try{ await API.resetMem(S.sessionId); toast("✓ Memory cleared","success"); UI.updateStats(); }
     catch(e){ toast(`Failed: ${e.message}`,"error"); }
   },
 
-  /* API Key */
-  onApiKeyChange(v){
-    S.apiKey=v.trim(); UI.updateUsage(); saveState();
-  },
+  onApiKeyChange(v){ S.apiKey=v.trim(); UI.updateUsage(); saveState(); },
   toggleKeyVis(){
-    const inp=$("apiKeyInput"),s=$("eyeShow"),h=$("eyeHide"); if(!inp)return;
+    const inp=$("apiKeyInput"),s=$("eyeShow"),h=$("eyeHide"); if(!inp) return;
     const hide=inp.type==="password"; inp.type=hide?"text":"password";
-    if(s)s.style.display=hide?"none":"block";
-    if(h)h.style.display=hide?"block":"none";
+    if(s) s.style.display=hide?"none":"block";
+    if(h) h.style.display=hide?"block":"none";
   },
   focusKeyInput(){
-    // Open model accordion and focus key field
-    const acc=$("acc-model"); if(acc&&!acc.classList.contains("open"))acc.classList.add("open");
-    const ki=$("apiKeyInput"); if(ki){ki.focus();ki.scrollIntoView({behavior:"smooth",block:"center"});}
+    const acc=$("acc-model"); if(acc&&!acc.classList.contains("open")) acc.classList.add("open");
+    const ki=$("apiKeyInput"); if(ki){ ki.focus(); ki.scrollIntoView({behavior:"smooth",block:"center"}); }
   },
 
-  /* Few-shot */
   selFsPreset(k){ S.fsPreset=k; DOM.buildModePanel("Few-Shot"); saveState(); },
   addFsEx(){
-    const i=$("fsInp")?.value.trim(),o=$("fsOut")?.value.trim();
-    if(!i||!o){toast("Fill both fields","error");return;}
+    const i=$("fsInp")?.value.trim(), o=$("fsOut")?.value.trim();
+    if(!i||!o){ toast("Fill both fields","error"); return; }
     S.fsCustom.push({input:i,output:o}); DOM.buildModePanel("Few-Shot"); saveState();
   },
   clearFsEx(){ S.fsCustom=[]; DOM.buildModePanel("Few-Shot"); saveState(); },
 
-  /* Input */
   autoResize(el){ el.style.height="auto"; el.style.height=Math.min(el.scrollHeight,160)+"px"; },
-  onKeyDown(e){ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();App.sendMessage();} },
+  onKeyDown(e){ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); App.sendMessage(); } },
   fillExample(){
-    const pool=S.settings?.example_prompts?.[S.mode]||[]; if(!pool.length)return;
-    const ta=$("msgInput"); if(!ta)return;
+    const pool=S.settings?.example_prompts?.[S.mode]||[]; if(!pool.length) return;
+    const ta=$("msgInput"); if(!ta) return;
     ta.value=pool[Math.floor(Math.random()*pool.length)];
     App.autoResize(ta); ta.focus();
   },
 
-  /* Copy code */
   copyCode(btn){
-    const code=_codeStore[parseInt(btn.dataset.ci,10)]; if(code===undefined)return;
+    const code=_codeStore[parseInt(btn.dataset.ci,10)]; if(code===undefined) return;
     navigator.clipboard.writeText(code).then(()=>{
       btn.textContent="Copied!"; btn.classList.add("copied");
-      setTimeout(()=>{btn.textContent="Copy";btn.classList.remove("copied");},2000);
+      setTimeout(()=>{ btn.textContent="Copy"; btn.classList.remove("copied"); },2000);
     }).catch(()=>toast("Copy failed","error"));
   },
 
-  /* Send */
   async sendMessage(){
-    if(S.streaming)return;
-    const ta=$("msgInput"); const text=ta?.value.trim(); if(!text)return;
+    if(S.streaming) return;
+    const ta=$("msgInput"); const text=ta?.value.trim(); if(!text) return;
 
-    // Guard: no key at all
     if(!S.hasDefaultKey&&!S.apiKey){
-      toast("No API key available — add your key in the sidebar","error");
+      toast("No API key — add your key in the sidebar","error");
       App.focusKeyInput(); return;
     }
-    // Guard: shared key limit
     if(Usage.sharedLimitHit()){
-      toast(`Daily free limit (${S.dailyLimit}) reached — add your own key for unlimited access`,"error",5000);
+      toast(`Daily free limit (${S.dailyLimit} req/day) reached — add your own key`,"error",5000);
       App.focusKeyInput(); return;
     }
 
@@ -838,39 +829,50 @@ const App={
     }
 
     const payload={
-      user_input:text,mode:S.mode,persona:S.persona,
-      provider:S.provider,model:S.model,
-      api_key:S.apiKey,   // empty string → server uses DEFAULT_API_KEY env var
-      temperature:S.temperature,max_tokens:S.maxTokens,
-      memory_enabled:S.memoryEnabled,cot_steps:S.cotSteps,
-      examples,custom_system_prompt:S.customSysPrompt,session_id:S.sessionId,
+      user_input: text, mode: S.mode, persona: S.persona,
+      provider: S.provider, model: S.model, api_key: S.apiKey,
+      temperature: S.temperature, max_tokens: S.maxTokens,
+      memory_enabled: S.memoryEnabled, memory_depth: S.memoryDepth,
+      cot_steps: S.cotSteps, examples,
+      custom_system_prompt: S.customSysPrompt, session_id: S.sessionId,
     };
 
-    if(ta){ta.value="";App.autoResize(ta);}
+    if(ta){ ta.value=""; App.autoResize(ta); }
     Chat.appendUser(text);
     UI.setSending(true);
     Chat.showThinking();
     await Chat.streamAI(payload);
   },
 
-  /* New chat */
   async newChat(){
     Chat.clear(); S.sessionId=`nc_${Date.now()}`; S.currentHistId=null;
-    try{await API.resetMem(S.sessionId);}catch{}
+    try{ await API.resetMem(S.sessionId); }catch{}
     toast("New conversation");
   },
 
-  /* Export full */
   exportChat(){
-    if(!S.messages.length){toast("Nothing to export","info");return;}
-    App._dl(JSON.stringify({app:"NeuralChat",version:"6.1",exported:new Date().toISOString(),settings:{provider:S.provider,model:S.model,mode:S.mode,persona:S.persona,temperature:S.temperature,max_tokens:S.maxTokens,memory:S.memoryEnabled},messages:S.messages.map(m=>({role:m.role,content:m.content,time:m.time,mode:m.mode,tokens:m.tokens,latency_ms:m.latencyMs,cost_usd:m.costUsd})),totals:{tokens:S.totalTokens,cost_usd:S.totalCost.toFixed(6)}},null,2),`neuralchat_${new Date().toISOString().replace(/[:.]/g,"-").slice(0,19)}.json`);
+    if(!S.messages.length){ toast("Nothing to export","info"); return; }
+    App._dl(
+      JSON.stringify({
+        app:"NeuralChat",version:"6.2",exported:new Date().toISOString(),
+        settings:{provider:S.provider,model:S.model,mode:S.mode,persona:S.persona,
+                  temperature:S.temperature,max_tokens:S.maxTokens,
+                  memory:S.memoryEnabled,memory_depth:S.memoryDepth},
+        messages:S.messages.map(m=>({role:m.role,content:m.content,time:m.time,
+                  mode:m.mode,tokens:m.tokens,latency_ms:m.latencyMs,cost_usd:m.costUsd})),
+        totals:{tokens:S.totalTokens,cost_usd:S.totalCost.toFixed(6)},
+      },null,2),
+      `neuralchat_${new Date().toISOString().replace(/[:.]/g,"-").slice(0,19)}.json`
+    );
     toast("↓ Exported");
   },
 
-  /* Download single message */
   dlMsg(idx){
-    const msg=S.messages[idx]; if(!msg)return;
-    App._dl(JSON.stringify({app:"NeuralChat",exported:new Date().toISOString(),message:{role:msg.role,content:msg.content,time:msg.time,mode:msg.mode,tokens:msg.tokens,latency_ms:msg.latencyMs,cost_usd:msg.costUsd}},null,2),`nc_msg_${Date.now()}.json`);
+    const msg=S.messages[idx]; if(!msg) return;
+    App._dl(JSON.stringify({app:"NeuralChat",exported:new Date().toISOString(),
+      message:{role:msg.role,content:msg.content,time:msg.time,mode:msg.mode,
+               tokens:msg.tokens,latency_ms:msg.latencyMs,cost_usd:msg.costUsd}},null,2),
+      `nc_msg_${Date.now()}.json`);
     toast("↓ Message saved");
   },
 
@@ -878,35 +880,33 @@ const App={
     const a=document.createElement("a");
     a.href=URL.createObjectURL(new Blob([text],{type:"application/json"}));
     a.download=name;
-    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
   },
 
-  /* History */
   loadHist(id){
-    const e=Hist.get(id); if(!e)return;
+    const e=Hist.get(id); if(!e) return;
     Chat.clear(false);
     S.sessionId=e.id; S.currentHistId=id; S.messages=[]; S.totalTokens=0; S.totalCost=0;
-    const msgs=$("chatMessages"); const ws=$("welcomeScreen"); if(ws)ws.remove();
+    const msgs=$("chatMessages"); const ws=$("welcomeScreen"); if(ws) ws.remove();
     e.messages.forEach(m=>{
       S.messages.push(m);
-      if(m.role==="user")msgs.appendChild(DOM.buildUserMsg(m.content,m.time));
-      else msgs.appendChild(DOM.buildAiMsg(m));
-      if(m.tokens)S.totalTokens+=m.tokens;
-      if(m.costUsd)S.totalCost+=m.costUsd;
+      if(m.role==="user") msgs.appendChild(DOM.buildUserMsg(m.content,m.time));
+      else                msgs.appendChild(DOM.buildAiMsg(m));
+      if(m.tokens)  S.totalTokens+=m.tokens;
+      if(m.costUsd) S.totalCost+=m.costUsd;
     });
     UI.updateStats(); DOM.buildHistoryList(); scrollBottom(); toast("Loaded conversation");
   },
   delHist(id){
-    Hist.del(id); if(S.currentHistId===id)S.currentHistId=null;
+    Hist.del(id); if(S.currentHistId===id) S.currentHistId=null;
     DOM.buildHistoryList(); toast("Deleted");
   },
 
-  /* Sidebar */
   toggleSidebar(){
-    const sb=$("sidebar"); if(!sb)return;
-    if(window.innerWidth<=700)sb.classList.toggle("mobile-open");
-    else sb.classList.toggle("collapsed");
+    const sb=$("sidebar"); if(!sb) return;
+    if(window.innerWidth<=700) sb.classList.toggle("mobile-open");
+    else                       sb.classList.toggle("collapsed");
   },
 };
 

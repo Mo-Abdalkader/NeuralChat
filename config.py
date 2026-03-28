@@ -1,12 +1,8 @@
-"""
-config.py — NeuralChat v5.1
-All app constants. Zero framework imports. Safe to import anywhere.
-"""
+"""config.py — NeuralChat v6.2"""
 
 APP_NAME    = "NeuralChat"
-APP_VERSION = "5.1.0"
+APP_VERSION = "6.2.0"
 
-# ── Developer info ────────────────────────────────────────────
 DEVELOPER = {
     "name":       "Mohamed Abdalkader",
     "title":      "Freelance AI Engineer",
@@ -22,37 +18,14 @@ DEVELOPER = {
         "Python", "PyTorch", "TensorFlow", "Hugging Face", "LangChain",
         "FastAPI", "Docker", "MLflow", "Azure", "AWS", "FAISS", "Streamlit",
     ],
-    "projects": [
-        {
-            "name": "Medical Vision-Language Model",
-            "desc": "Fine-tuned Qwen 2.5 7B with LoRA + 4-bit quantization on retinal images for diabetic retinopathy diagnosis.",
-            "tags": ["PyTorch", "LoRA", "Medical AI"],
-        },
-        {
-            "name": "Medical RAG System",
-            "desc": "Semantic retrieval over 20+ medical textbooks using FAISS + LangChain for accurate clinical Q&A.",
-            "tags": ["LangChain", "FAISS", "RAG"],
-        },
-        {
-            "name": "Brain Tumor CNN",
-            "desc": "~95% accuracy MRI classifier. Deployed via Streamlit + Docker with full CI/CD pipeline.",
-            "tags": ["CNN", "Docker", "MLflow"],
-        },
-        {
-            "name": "Renewable Energy Forecasting",
-            "desc": "Graduation project — LSTM, GRU & Transformer ensemble for solar and wind energy prediction.",
-            "tags": ["LSTM", "Transformers", "Time Series"],
-        },
-    ],
     "links": {
-        "GitHub":    "https://github.com/MohamedAbdalkader",
-        "LinkedIn":  "https://linkedin.com/in/MohamedAbdalkader",
-        "Portfolio": "https://mohamed-ai.dev",
-        "Email":     "mailto:contact@mohamed-ai.dev",
+        "GitHub":   "https://github.com/Mo-Abdalkader",
+        "LinkedIn": "https://linkedin.com/in/MohamedAbdalkader",
+        "Portfolio":"https://mo-abdalkader.github.io/Portfolio",
+        "Email":    "mailto:contact@mohamed-ai.dev",
     },
 }
 
-# ── Prompting modes ───────────────────────────────────────────
 MODES: dict[str, dict] = {
     "Zero-Shot": {
         "icon":        "○",
@@ -68,25 +41,18 @@ MODES: dict[str, dict] = {
     },
     "Chain-of-Thought": {
         "icon":        "◎",
-        "description": "Forces numbered step-by-step reasoning before the final answer. Reduces errors on complex problems.",
+        "description": "Forces numbered step-by-step reasoning before the final answer.",
         "when_to_use": "Math, logic puzzles, multi-step reasoning, Fermi estimation.",
         "example":     "How many piano tuners are there in Chicago?",
     },
-    "Memory Chain": {
-        "icon":        "◉",
-        "description": "The model maintains full conversation history across turns — true multi-turn memory.",
-        "when_to_use": "Long conversations, tutoring sessions, interviews, progressive tasks.",
-        "example":     "My name is Alex. [later] What is my name?",
-    },
     "Structured Output": {
         "icon":        "▣",
-        "description": "Forces a JSON response with answer, confidence level, key points and a follow-up question.",
+        "description": "Returns a structured card: answer, confidence score, key points, and a follow-up question.",
         "when_to_use": "Research summaries, analysis, parseable outputs, dashboards.",
         "example":     "What is Docker and why should I use it?",
     },
 }
 
-# ── Personas ──────────────────────────────────────────────────
 PERSONAS: dict[str, dict] = {
     "Assistant": {
         "prompt": "You are a helpful AI assistant. Be clear, accurate, and concise. Use markdown formatting.",
@@ -120,7 +86,6 @@ PERSONAS: dict[str, dict] = {
     },
 }
 
-# ── Few-Shot presets ──────────────────────────────────────────
 FEW_SHOT_PRESETS: dict[str, dict] = {
     "Sentiment Analysis": {
         "description": "Classify text as Positive, Negative, or Neutral.",
@@ -133,18 +98,18 @@ FEW_SHOT_PRESETS: dict[str, dict] = {
     "SQL Generator": {
         "description": "Convert natural language into SQL queries.",
         "examples": [
-            {"input": "All users older than 30",         "output": "SELECT * FROM users WHERE age > 30;"},
-            {"input": "Count products per category",     "output": "SELECT category, COUNT(*) FROM products GROUP BY category;"},
-            {"input": "Top 5 most expensive items",      "output": "SELECT * FROM items ORDER BY price DESC LIMIT 5;"},
+            {"input": "All users older than 30",     "output": "SELECT * FROM users WHERE age > 30;"},
+            {"input": "Count products per category", "output": "SELECT category, COUNT(*) FROM products GROUP BY category;"},
+            {"input": "Top 5 most expensive items",  "output": "SELECT * FROM items ORDER BY price DESC LIMIT 5;"},
         ],
     },
     "Email Rewriter": {
         "description": "Turn casual notes into professional emails.",
         "examples": [
             {"input": "tell john meeting is cancelled",
-             "output": "Hi John,\n\nI wanted to let you know that our upcoming meeting has been cancelled. Apologies for any inconvenience.\n\nBest regards"},
+             "output": "Hi John,\n\nI wanted to let you know that our upcoming meeting has been cancelled.\n\nBest regards"},
             {"input": "ask sarah for the report asap",
-             "output": "Hi Sarah,\n\nCould you please share the report at your earliest convenience? It's needed urgently.\n\nThank you"},
+             "output": "Hi Sarah,\n\nCould you please share the report at your earliest convenience?\n\nThank you"},
         ],
     },
     "Code Reviewer": {
@@ -162,7 +127,6 @@ FEW_SHOT_PRESETS: dict[str, dict] = {
     },
 }
 
-# ── Example prompts per mode ──────────────────────────────────
 EXAMPLE_PROMPTS: dict[str, list[str]] = {
     "Zero-Shot": [
         "Explain how attention mechanisms work in transformers",
@@ -178,11 +142,6 @@ EXAMPLE_PROMPTS: dict[str, list[str]] = {
         "How many golf balls fit inside a school bus?",
         "If I invest $500/month at 7% annual return for 20 years, what do I end up with?",
         "A bat and ball cost $1.10. The bat costs $1 more than the ball. How much is the ball?",
-    ],
-    "Memory Chain": [
-        "My name is Alex and I'm a data engineer who works with Spark and Kafka.",
-        "Based on what I told you, what skills should I focus on next?",
-        "Design a 3-month learning plan tailored to my background.",
     ],
     "Structured Output": [
         "What is containerization and why does it matter?",
