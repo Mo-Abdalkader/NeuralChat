@@ -20,7 +20,7 @@ const CFG = {
     Cohere: {
       models: ["command-a-03-2025","command-r-plus-08-2024","command-r-08-2024","command-r7b-12-2024"],
       default: "command-a-03-2025", cost: 0.0025, docs: "https://docs.cohere.com/docs/models",
-      tier: '<span class="tier-free">✓ Free tier available (20 req/day)</span>',
+      tier: '<span class="tier-free">✓ Free tier available (20 req/min)</span>',
     },
     OpenAI: {
       models: ["gpt-4.1","gpt-4.1-mini","gpt-4o","gpt-4o-mini"],
@@ -234,8 +234,33 @@ function initAurora(){
 ═══════════════════════════════════════════ */
 function initCursorGlow(){
   const g=$("cursorGlow"); if(!g)return;
+  let mx=window.innerWidth/2, my=window.innerHeight/2;
+  let cx=mx, cy=my;
+  let hue=240, targetHue=240;
+
   document.addEventListener("mousemove",e=>{
-    g.style.left=e.clientX+"px"; g.style.top=e.clientY+"px";
+    mx=e.clientX; my=e.clientY;
+    // shift hue based on position — left=blue, right=purple, top=cyan
+    targetHue = 220 + (e.clientX/window.innerWidth)*60;
+  });
+
+  // Smooth trailing follow
+  function animate(){
+    cx += (mx - cx) * 0.07;
+    cy += (my - cy) * 0.07;
+    hue += (targetHue - hue) * 0.05;
+    g.style.left = cx + "px";
+    g.style.top  = cy + "px";
+    g.style.background = `radial-gradient(circle, hsla(${hue},85%,65%,0.09) 0%, hsla(${hue+30},70%,50%,0.04) 40%, transparent 70%)`;
+    requestAnimationFrame(animate);
+  }
+  animate();
+
+  // Pulse on click
+  document.addEventListener("mousedown",()=>{
+    g.style.transform="translate(-50%,-50%) scale(1.6)";
+    g.style.opacity="0.7";
+    setTimeout(()=>{ g.style.transform="translate(-50%,-50%) scale(1)"; g.style.opacity="1"; },300);
   });
 }
 
@@ -336,13 +361,13 @@ const DOM={
     const cost=msg.costUsd   ?`<span class="meta-pill"><svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>${fmtCost(msg.costUsd)}</span>`:"";
     const midx=S.messages.length;
     const g=document.createElement("div"); g.className="msg-group";
-    g.innerHTML=`<div class="ai-row"><div class="ai-avatar">N</div><div class="ai-bubble"><div class="ai-content">${html}</div><div class="ai-footer"><span class="ai-mode-tag">${msg.mode||S.mode}</span><div class="ai-meta">${tok}${lat}${cost}</div><button class="ai-dl-btn" onclick="App.dlMsg(${midx})"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Save</button><span style="color:var(--t4)">${msg.time}</span></div></div></div>`;
+    g.innerHTML=`<div class="ai-row"><div class="ai-avatar"><img src="/static/logo.png" alt="AI" class="ai-avatar-img" onerror="this.parentElement.textContent='N'"/></div><div class="ai-bubble"><div class="ai-content">${html}</div><div class="ai-footer"><span class="ai-mode-tag">${msg.mode||S.mode}</span><div class="ai-meta">${tok}${lat}${cost}</div><button class="ai-dl-btn" onclick="App.dlMsg(${midx})"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Save</button><span style="color:var(--t4)">${msg.time}</span></div></div></div>`;
     return g;
   },
 
   buildThinking(){
     const g=document.createElement("div"); g.id="thinkingRow"; g.className="thinking-row";
-    g.innerHTML=`<div class="ai-avatar">N</div><div class="thinking-bubble"><div class="dots"><span></span><span></span><span></span></div></div>`;
+    g.innerHTML=`<div class="ai-avatar"><img src="/static/logo.png" alt="AI" class="ai-avatar-img" onerror="this.parentElement.textContent='N'"/></div><div class="thinking-bubble"><div class="dots"><span></span><span></span><span></span></div></div>`;
     return g;
   },
 
@@ -354,7 +379,7 @@ const DOM={
     const bubble=document.createElement("div"); bubble.className="ai-bubble";
     bubble.appendChild(content); bubble.appendChild(footer);
     const row=document.createElement("div"); row.className="ai-row";
-    row.innerHTML=`<div class="ai-avatar">N</div>`; row.appendChild(bubble); g.appendChild(row);
+    row.innerHTML=`<div class="ai-avatar"><img src="/static/logo.png" alt="AI" class="ai-avatar-img" onerror="this.parentElement.textContent='N'"/></div>`; row.appendChild(bubble); g.appendChild(row);
     return {group:g,content,footer};
   },
 
