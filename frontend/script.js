@@ -20,7 +20,7 @@ const CFG = {
     Cohere: {
       models: ["command-a-03-2025","command-r-plus-08-2024","command-r-08-2024","command-r7b-12-2024"],
       default: "command-a-03-2025", cost: 0.0025, docs: "https://docs.cohere.com/docs/models",
-      tier: '<span class="tier-free">✓ Free tier available (20 req/min)</span>',
+      tier: '<span class="tier-free">✓ Free tier available (20 req/day)</span>',
     },
     OpenAI: {
       models: ["gpt-4.1","gpt-4.1-mini","gpt-4o","gpt-4o-mini"],
