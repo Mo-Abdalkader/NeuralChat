@@ -295,7 +295,7 @@ body{display:flex;position:relative}
 
 /* Avatar: strictly 28×28, image never overflows */
 .ai-avatar{width:28px;height:28px;min-width:28px;min-height:28px;border-radius:8px;flex-shrink:0;background:linear-gradient(135deg,var(--ac),var(--vio));display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;font-weight:700;color:#fff;margin-top:2px;box-shadow:0 0 14px rgba(99,102,241,.3);overflow:hidden}
-.ai-avatar-img{width:28px;height:28px;min-width:28px;min-height:28px;max-width:28px;max-height:28px;object-fit:cover;object-position:center;display:block;border-radius:8px;flex-shrink:0}
+.ai-avatar-img{width:28px!important;height:28px!important;min-width:28px!important;min-height:28px!important;max-width:28px!important;max-height:28px!important;object-fit:cover;object-position:center;display:block!important;border-radius:8px;flex-shrink:0}
 
 .ai-bubble{flex:1;min-width:0;background:var(--ab);border:1px solid var(--abd);border-radius:var(--rxs) var(--r) var(--r) var(--r);padding:12px 15px 10px;backdrop-filter:blur(8px);transition:border-color .2s}
 .ai-bubble:hover{border-color:rgba(99,102,241,.22)}
