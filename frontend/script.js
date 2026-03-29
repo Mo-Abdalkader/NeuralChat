@@ -340,12 +340,12 @@ const DOM={
     const cost=msg.costUsd   ?`<span class="meta-pill"><svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>${fmtCost(msg.costUsd)}</span>`:"";
     const midx=S.messages.length;
     const g=document.createElement("div"); g.className="msg-group";
-    g.innerHTML=`<div class="ai-row"><div class="ai-avatar"><img class="ai-avatar-img" src="/logo.png" alt="AI"/></div><div class="ai-bubble"><div class="ai-content">${html}</div><div class="ai-footer"><span class="ai-mode-tag">${msg.mode||S.mode}</span><div class="ai-meta">${tok}${lat}${cost}</div><button class="ai-dl-btn" onclick="App.dlMsg(${midx})"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Save</button><span style="color:var(--t4)">${msg.time}</span></div></div></div>`;
+    g.innerHTML=`<div class="ai-row"><div class="ai-avatar"><img class="ai-avatar-img" src="/static/logo.png" alt="AI"/></div><div class="ai-bubble"><div class="ai-content">${html}</div><div class="ai-footer"><span class="ai-mode-tag">${msg.mode||S.mode}</span><div class="ai-meta">${tok}${lat}${cost}</div><button class="ai-dl-btn" onclick="App.dlMsg(${midx})"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Save</button><span style="color:var(--t4)">${msg.time}</span></div></div></div>`;
     return g;
   },
   buildThinking(){
     const g=document.createElement("div"); g.id="thinkingRow"; g.className="thinking-row";
-    g.innerHTML=`<div class="ai-avatar"><img class="ai-avatar-img" src="/logo.png" alt="AI"/></div><div class="thinking-bubble"><div class="dots"><span></span><span></span><span></span></div></div>`;
+    g.innerHTML=`<div class="ai-avatar"><img class="ai-avatar-img" src="/static/logo.png" alt="AI"/></div><div class="thinking-bubble"><div class="dots"><span></span><span></span><span></span></div></div>`;
     return g;
   },
   buildStreamBubble(mode){
@@ -356,7 +356,7 @@ const DOM={
     const bubble=document.createElement("div"); bubble.className="ai-bubble";
     bubble.appendChild(content); bubble.appendChild(footer);
     const row=document.createElement("div"); row.className="ai-row";
-    row.innerHTML=`<div class="ai-avatar"><img class="ai-avatar-img" src="/logo.png" alt="AI"/></div>`; row.appendChild(bubble); g.appendChild(row);
+    row.innerHTML=`<div class="ai-avatar"><img class="ai-avatar-img" src="/static/logo.png" alt="AI"/></div>`; row.appendChild(bubble); g.appendChild(row);
     return {group:g,content,footer};
   },
 
