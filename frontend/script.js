@@ -55,12 +55,12 @@ const CFG = {
       example:"A bat and ball cost $1.10. The bat costs $1 more. How much is the ball?",
       color:"var(--cyan)",
     },
-    "Memory Chain": {
-      icon:"◉", badge:"Memory",
-      desc:"The model maintains full conversation history across all turns. True multi-turn memory — it knows everything said earlier.",
-      use:"Long conversations, tutoring, interviews, progressive tasks, role-play.",
-      example:"My name is Alex. I work with Spark. [later] What should I learn next?",
-      color:"var(--ok)",
+    // "Memory Chain": {
+    //   icon:"◉", badge:"Memory",
+    //   desc:"The model maintains full conversation history across all turns. True multi-turn memory — it knows everything said earlier.",
+    //   use:"Long conversations, tutoring, interviews, progressive tasks, role-play.",
+    //   example:"My name is Alex. I work with Spark. [later] What should I learn next?",
+    //   color:"var(--ok)",
     },
     "Structured Output": {
       icon:"▣", badge:"Structured",
