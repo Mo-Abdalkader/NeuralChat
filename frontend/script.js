@@ -20,7 +20,7 @@ const CFG = {
     Cohere: {
       models: ["command-a-03-2025","command-r-plus-08-2024","command-r-08-2024","command-r7b-12-2024"],
       default: "command-a-03-2025", cost: 0.0025, docs: "https://docs.cohere.com/docs/models",
-      tier: '<span class="tier-free">✓ Free tier available · 20 req/day shared</span>',
+      tier: '<span class="tier-free">✓ Free tier available (20 req/min)</span>',
     },
     OpenAI: {
       models: ["gpt-4.1","gpt-4.1-mini","gpt-4o","gpt-4o-mini"],
@@ -55,13 +55,13 @@ const CFG = {
       example:"A bat and ball cost $1.10. The bat costs $1 more. How much is the ball?",
       color:"var(--cyan)",
     },
-    // "Memory Chain": {
-    //   icon:"◉", badge:"Memory",
-    //   desc:"The model maintains full conversation history across all turns. True multi-turn memory — it knows everything said earlier.",
-    //   use:"Long conversations, tutoring, interviews, progressive tasks, role-play.",
-    //   example:"My name is Alex. I work with Spark. [later] What should I learn next?",
-    //   color:"var(--ok)",
-    // },
+    "Memory Chain": {
+      icon:"◉", badge:"Memory",
+      desc:"The model maintains full conversation history across all turns. True multi-turn memory — it knows everything said earlier.",
+      use:"Long conversations, tutoring, interviews, progressive tasks, role-play.",
+      example:"My name is Alex. I work with Spark. [later] What should I learn next?",
+      color:"var(--ok)",
+    },
     "Structured Output": {
       icon:"▣", badge:"Structured",
       desc:"Forces a JSON response with answer, confidence level (High/Medium/Low), key points, and a follow-up question. Perfect for structured data.",
@@ -173,16 +173,6 @@ function fmtTok(n){ return !n?"":n>=1000?`${(n/1000).toFixed(1)}k tok`:`${n} tok
 function scrollBottom(smooth=true){
   const vp=$("chatViewport"); if(!vp)return;
   vp.scrollTo({top:vp.scrollHeight,behavior:smooth?"smooth":"instant"});
-}
-function wrapText(text,cols){
-  const words=text.split(" "); const lines=[]; let line="";
-  for(const w of words){
-    const candidate=line?line+" "+w:w;
-    if(candidate.length>cols&&line){ lines.push(line); line=w; }
-    else line=candidate;
-  }
-  if(line) lines.push(line);
-  return lines.join("\n");
 }
 function activeKey(){
   // User's own key takes priority; fall back to server default (empty string sent → server resolves)
@@ -332,12 +322,14 @@ const DOM={
   },
 
   buildUserMsg(content,time){
-    const escaped=content
-      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
-      .replace(/\n+/g," ").trim();
-    const wrapped=wrapText(escaped,70).replace(/\n/g,"<br>");
+    const safe=content
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/\n+/g," ")   // collapse newlines → single space
+      .trim();
     const g=document.createElement("div"); g.className="msg-group";
-    g.innerHTML=`<div class="user-row"><div class="user-msg-wrap"><div class="user-bubble">${wrapped}</div><div class="user-ts">${time}</div></div></div>`;
+    g.innerHTML=`<div class="user-row"><div><div class="user-bubble">${safe}</div><div class="user-ts">${time}</div></div></div>`;
     return g;
   },
 
@@ -348,14 +340,13 @@ const DOM={
     const cost=msg.costUsd   ?`<span class="meta-pill"><svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>${fmtCost(msg.costUsd)}</span>`:"";
     const midx=S.messages.length;
     const g=document.createElement("div"); g.className="msg-group";
-    g.innerHTML=`<div class="ai-row"><div class="ai-avatar"><img src="/static/logo.png" alt="" class="ai-avatar-img" onerror="this.parentElement.textContent='N'"/></div><div class="ai-bubble"><div class="ai-content">${html}</div><div class="ai-footer"><span class="ai-mode-tag">${msg.mode||S.mode}</span><div class="ai-meta">${tok}${lat}${cost}</div><button class="ai-dl-btn" onclick="App.dlMsg(${midx})"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Save</button><span style="color:var(--t4)">${msg.time}</span></div></div></div>`;
-    setTimeout(()=>{ if(typeof hljs!=="undefined") g.querySelectorAll("pre code").forEach(b=>hljs.highlightElement(b)); },0);
+    g.innerHTML=`<div class="ai-row"><div class="ai-avatar">N</div><div class="ai-bubble"><div class="ai-content">${html}</div><div class="ai-footer"><span class="ai-mode-tag">${msg.mode||S.mode}</span><div class="ai-meta">${tok}${lat}${cost}</div><button class="ai-dl-btn" onclick="App.dlMsg(${midx})"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Save</button><span style="color:var(--t4)">${msg.time}</span></div></div></div>`;
     return g;
   },
 
   buildThinking(){
     const g=document.createElement("div"); g.id="thinkingRow"; g.className="thinking-row";
-    g.innerHTML=`<div class="ai-avatar"><img src="/static/logo.png" alt="" class="ai-avatar-img" onerror="this.parentElement.textContent='N'"/></div><div class="thinking-bubble"><div class="dots"><span></span><span></span><span></span></div><span class="thinking-label">${S.provider} is thinking…</span></div>`;
+    g.innerHTML=`<div class="ai-avatar">N</div><div class="thinking-bubble"><div class="dots"><span></span><span></span><span></span></div></div>`;
     return g;
   },
 
@@ -366,10 +357,8 @@ const DOM={
     footer.innerHTML=`<span class="ai-mode-tag">${mode}</span><span style="color:var(--t4);margin-left:auto">typing…</span>`;
     const bubble=document.createElement("div"); bubble.className="ai-bubble";
     bubble.appendChild(content); bubble.appendChild(footer);
-    const av=document.createElement("div"); av.className="ai-avatar";
-    av.innerHTML=`<img src="/static/logo.png" alt="" class="ai-avatar-img" onerror="this.parentElement.textContent='N'"/>`;
     const row=document.createElement("div"); row.className="ai-row";
-    row.appendChild(av); row.appendChild(bubble); g.appendChild(row);
+    row.innerHTML=`<div class="ai-avatar">N</div>`; row.appendChild(bubble); g.appendChild(row);
     return {group:g,content,footer};
   },
 
@@ -432,10 +421,13 @@ const DOM={
     const presets=S.settings?.few_shot_presets||{};
     const examples=S.fsPreset==="Custom"?S.fsCustom:(presets[S.fsPreset]?.examples||[]);
     const chips=Object.keys(presets).map(k=>`<button class="fs-chip${k===S.fsPreset?" active":""}" onclick="App.selFsPreset('${k}')">${k}</button>`).join("");
+    const activeBar=examples.length
+      ?`<div class="fs-active-bar"><span class="fs-active-dot"></span>${examples.length} example${examples.length>1?"s":""} loaded — AI will follow this pattern</div>`
+      :`<div class="fs-active-bar fs-active-empty">No examples loaded — select a preset or add custom examples</div>`;
     const cards=examples.length?examples.map(e=>`<div class="fs-card"><div class="fs-lbl">Input</div><div class="fs-val">${e.input.replace(/</g,"&lt;")}</div><div class="fs-lbl" style="margin-top:4px">Output</div><div class="fs-val out">${e.output.replace(/</g,"&lt;").replace(/\n/g,"<br>")}</div></div>`).join(""):`<div class="fs-empty">No examples yet</div>`;
-    const addForm=S.fsPreset==="Custom"?`<div class="fs-add"><input class="nc-input" id="fsInp" placeholder="User input" autocomplete="off"/><input class="nc-input" id="fsOut" placeholder="Model output" autocomplete="off" style="margin-top:5px"/><div class="fs-add-btns"><button class="nc-btn-ghost" onclick="App.addFsEx()">Add</button><button class="nc-btn-ghost" onclick="App.clearFsEx()" style="color:var(--err);border-color:rgba(239,68,68,.3)">Clear all</button></div></div>`:"";
+    const addForm=S.fsPreset==="Custom"?`<div class="fs-add"><input class="nc-input" id="fsInp" placeholder="User input" autocomplete="off"/><input class="nc-input" id="fsOut" placeholder="Model output" autocomplete="off" style="margin-top:5px"/><div class="fs-add-btns"><button class="nc-btn-ghost" onclick="App.addFsEx()">Add example</button><button class="nc-btn-ghost" onclick="App.clearFsEx()" style="color:var(--err);border-color:rgba(239,68,68,.3)">Clear all</button></div></div>`:"";
     const div=document.createElement("div"); div.className="mode-panel";
-    div.innerHTML=`<div class="field-lbl">Examples</div><div class="fs-presets-row">${chips}</div><div class="fs-examples">${cards}</div>${addForm}`;
+    div.innerHTML=`<div class="field-lbl">Preset</div><div class="fs-presets-row">${chips}</div>${activeBar}<div class="field-lbl" style="margin-top:8px">Examples</div><div class="fs-examples">${cards}</div>${addForm}`;
     return div;
   },
 
@@ -490,7 +482,6 @@ const Chat={
 
     const onDone=meta=>{
       content.classList.remove("stream-cursor");
-      if(typeof hljs!=="undefined") content.querySelectorAll("pre code").forEach(b=>hljs.highlightElement(b));
       const tok =meta.tokens    ?`<span class="meta-pill"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>${fmtTok(meta.tokens)}</span>`:"";
       const lat =meta.latency_ms?`<span class="meta-pill"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${(meta.latency_ms/1000).toFixed(2)}s</span>`:"";
       const cost=meta.cost_usd  ?`<span class="meta-pill"><svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>${fmtCost(meta.cost_usd)}</span>`:"";
@@ -799,11 +790,17 @@ const App={
   },
 
   /* Few-shot */
-  selFsPreset(k){ S.fsPreset=k; DOM.buildModePanel("Few-Shot"); saveState(); },
+  selFsPreset(k){
+    S.fsPreset=k; DOM.buildModePanel("Few-Shot"); saveState();
+    const presets=S.settings?.few_shot_presets||{};
+    const count=k==="Custom"?S.fsCustom.length:(presets[k]?.examples?.length||0);
+    toast(`✓ ${k} — ${count} example${count!==1?"s":""} active`,"success",2000);
+  },
   addFsEx(){
     const i=$("fsInp")?.value.trim(),o=$("fsOut")?.value.trim();
     if(!i||!o){toast("Fill both fields","error");return;}
     S.fsCustom.push({input:i,output:o}); DOM.buildModePanel("Few-Shot"); saveState();
+    toast(`✓ Example added — ${S.fsCustom.length} total`,"success",2000);
   },
   clearFsEx(){ S.fsCustom=[]; DOM.buildModePanel("Few-Shot"); saveState(); },
 
