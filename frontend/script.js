@@ -61,7 +61,7 @@ const CFG = {
     //   use:"Long conversations, tutoring, interviews, progressive tasks, role-play.",
     //   example:"My name is Alex. I work with Spark. [later] What should I learn next?",
     //   color:"var(--ok)",
-    },
+    // },
     "Structured Output": {
       icon:"▣", badge:"Structured",
       desc:"Forces a JSON response with answer, confidence level (High/Medium/Low), key points, and a follow-up question. Perfect for structured data.",
