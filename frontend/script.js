@@ -248,8 +248,11 @@ let   _codeIdx=0;
 function initMarkdown(){
   if(typeof marked==="undefined")return;
   const renderer={
-    code({text,lang}){
-      const sl=(lang||"").toLowerCase().trim()||"text";
+    // marked v11: code() receives positional args, not a destructured object
+    code(code,language){
+      const lang=(typeof language==="object"&&language!==null)?language.lang||"": language||"";
+      const sl=lang.toLowerCase().trim()||"text";
+      const text=typeof code==="object"&&code!==null?(code.text||code.raw||String(code)):String(code);
       let hi=text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
       if(typeof hljs!=="undefined"){
         try{ hi=hljs.getLanguage(sl)?hljs.highlight(text,{language:sl}).value:hljs.highlightAuto(text).value; }catch{}
@@ -258,8 +261,18 @@ function initMarkdown(){
       _codeStore[idx]=text;
       return `<div class="code-block-wrap"><div class="code-header"><span class="code-lang">${sl}</span><button class="copy-btn" data-ci="${idx}" onclick="App.copyCode(this)">Copy</button></div><pre><code class="hljs language-${sl}">${hi}</code></pre></div>`;
     },
+    // explicit heading renderer — ensures h1/h2/h3/h4 produce correctly sized tags
+    heading(text,level){
+      const t=typeof text==="object"&&text!==null?(text.text||text.raw||String(text)):String(text);
+      const l=typeof level==="object"&&level!==null?(level.depth||level.level||1):Number(level)||1;
+      return `<h${l}>${t}</h${l}>\n`;
+    },
   };
-  marked.use({renderer});
+  marked.use({
+    renderer,
+    gfm:true,
+    breaks:true,
+  });
 }
 
 function renderMd(text){
