@@ -1,4 +1,4 @@
-"""schemas.py — NeuralChat v6.2"""
+"""schemas.py — NeuralChat v6.3"""
 from __future__ import annotations
 from typing import List, Optional
 from pydantic import BaseModel, Field
@@ -9,31 +9,42 @@ class FewShotExample(BaseModel):
     output: str = Field(..., description="Expected model output")
 
 
+class ModelPricing(BaseModel):
+    """Input/output price pair for a single model, expressed per 1 000 tokens."""
+    in_1k:  float = Field(..., description="Cost per 1 000 input tokens (USD)")
+    out_1k: float = Field(..., description="Cost per 1 000 output tokens (USD)")
+
+
 class ChatRequest(BaseModel):
-    user_input:           str                            = Field(...,             description="The user's message")
-    mode:                 str                            = Field("Zero-Shot",     description="Prompting mode")
-    persona:              str                            = Field("Assistant",     description="Persona name")
-    provider:             str                            = Field("Cohere",        description="LLM provider")
-    model:                str                            = Field("command-a-03-2025", description="Model name")
-    api_key:              str                            = Field(...,             description="Provider API key")
-    temperature:          float                          = Field(0.7,  ge=0.0, le=1.0)
-    max_tokens:           int                            = Field(1024, ge=128, le=4096)
-    memory_enabled:       bool                           = Field(True)
-    memory_depth:         int                            = Field(5,    ge=1,  le=20,  description="Max message pairs to include in history")
-    cot_steps:            int                            = Field(3,    ge=2,  le=8)
-    examples:             Optional[List[FewShotExample]] = Field(None)
-    custom_system_prompt: str                            = Field("",              description="Override persona system prompt")
-    session_id:           str                            = Field("default",       description="Session identifier for memory")
+    user_input:             str                            = Field(...,                  description="The user's message")
+    mode:                   str                            = Field("Zero-Shot",          description="Prompting mode")
+    persona:                str                            = Field("Assistant",          description="Persona name")
+    provider:               str                            = Field("Cohere",             description="LLM provider")
+    model:                  str                            = Field("command-a-03-2025",  description="Model name")
+    api_key:                str                            = Field(...,                  description="Provider API key")
+    temperature:            float                          = Field(0.7,  ge=0.0, le=1.0)
+    max_tokens:             int                            = Field(1024, ge=128, le=4096)
+    memory_enabled:         bool                           = Field(True)
+    memory_depth:           int                            = Field(5,    ge=1,  le=20,   description="Max message pairs to include in history")
+    cot_steps:              int                            = Field(3,    ge=2,  le=8)
+    examples:               Optional[List[FewShotExample]] = Field(None)
+    custom_system_prompt:   str                            = Field("",                   description="Override persona system prompt")
+    session_id:             str                            = Field("default",            description="Session identifier for memory")
+    # Custom-model pricing — ignored for known models (server uses registry prices)
+    custom_price_in_1k:     Optional[float]                = Field(None, ge=0.0,         description="Input price per 1K tokens for custom models (USD)")
+    custom_price_out_1k:    Optional[float]                = Field(None, ge=0.0,         description="Output price per 1K tokens for custom models (USD)")
 
 
 class ChatResponse(BaseModel):
-    text:       str
-    tokens:     int
-    latency_ms: int
-    cost_usd:   float
-    mode:       str
-    provider:   str
-    model:      str
+    text:          str
+    input_tokens:  int
+    output_tokens: int
+    tokens:        int    # total = input + output (kept for backwards compatibility)
+    latency_ms:    int
+    cost_usd:      float
+    mode:          str
+    provider:      str
+    model:         str
 
 
 class ResetMemoryRequest(BaseModel):
@@ -50,8 +61,9 @@ class ProviderInfo(BaseModel):
     label:         str
     default_model: str
     models:        List[str]
-    cost_per_1k:   float
+    pricing:       dict[str, ModelPricing]   # model_name → {in_1k, out_1k}
     docs_url:      str
+    speed_label:   str = ""
 
 
 class ModeInfo(BaseModel):
@@ -99,6 +111,9 @@ class StreamRequest(BaseModel):
     examples:             Optional[List[FewShotExample]] = None
     custom_system_prompt: str   = ""
     session_id:           str   = "default"
+    # Custom-model pricing — ignored for known models (server uses registry prices)
+    custom_price_in_1k:   Optional[float] = Field(None, ge=0.0, description="Input price per 1K tokens for custom models (USD)")
+    custom_price_out_1k:  Optional[float] = Field(None, ge=0.0, description="Output price per 1K tokens for custom models (USD)")
 
 
 class ErrorResponse(BaseModel):

@@ -1,11 +1,11 @@
-"""engine.py — NeuralChat v6.2"""
+"""engine.py — NeuralChat v6.3"""
 from __future__ import annotations
 
 import json
 import re
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, FewShotChatMessagePromptTemplate
@@ -17,13 +17,19 @@ from providers import build_llm
 
 @dataclass
 class Reply:
-    text:       str
-    tokens:     int   = 0
-    latency_ms: int   = 0
-    cost_usd:   float = 0.0
-    mode:       str   = ""
-    provider:   str   = ""
-    model:      str   = ""
+    text:          str
+    input_tokens:  int   = 0
+    output_tokens: int   = 0
+    latency_ms:    int   = 0
+    cost_usd:      float = 0.0
+    mode:          str   = ""
+    provider:      str   = ""
+    model:         str   = ""
+
+    @property
+    def tokens(self) -> int:
+        """Total tokens — kept for backwards compatibility."""
+        return self.input_tokens + self.output_tokens
 
 
 class BaseRunner(ABC):
@@ -184,6 +190,26 @@ class StructuredOutputRunner(BaseRunner):
         return response
 
 
+# ── Token estimation helpers ──────────────────────────────────
+_WORDS_TO_TOKENS = 1.35   # rough universal approximation
+
+
+def _estimate_tokens(text: str) -> int:
+    """Estimate token count from word count (no tokeniser dependency)."""
+    return max(1, int(len(text.split()) * _WORDS_TO_TOKENS))
+
+
+def _compute_cost(input_tokens: int, output_tokens: int,
+                  price_in_1k: float, price_out_1k: float) -> float:
+    """
+    Calculate USD cost given separate input/output token counts and prices.
+
+        cost = (input_tokens / 1000) * price_in_1k
+             + (output_tokens / 1000) * price_out_1k
+    """
+    return (input_tokens / 1000.0) * price_in_1k + (output_tokens / 1000.0) * price_out_1k
+
+
 class NeuralChatEngine:
     """Central engine. Manages per-session history and dispatches to runners."""
 
@@ -220,17 +246,21 @@ class NeuralChatEngine:
         api_key:        str,
         temperature:    float,
         max_tokens:     int,
+        price_in_1k:    float = 0.0,
+        price_out_1k:   float = 0.0,
         memory_enabled: bool  = True,
         memory_depth:   int   = 5,
         cot_steps:      int   = 3,
         examples:       list  | None = None,
         custom_sys:     str   = "",
         session_id:     str   = "default",
-        cost_per_1k:    float = 0.003,
     ) -> Reply:
         """Build the LLM, select the runner, execute, and return a Reply."""
         llm    = build_llm(provider, model, temperature, max_tokens, api_key)
         runner = self._RUNNERS.get(mode, ZeroShotRunner)(llm)
+
+        # Estimate input tokens from the user message (approximation pre-call)
+        input_tokens = _estimate_tokens(user_input)
 
         t0 = time.monotonic()
         try:
@@ -248,11 +278,17 @@ class NeuralChatEngine:
         except Exception as exc:
             text = f"**Error:** `{exc}`"
 
-        latency_ms = int((time.monotonic() - t0) * 1000)
-        tokens     = int(len(text.split()) * 1.35)
-        cost_usd   = (tokens / 1000) * cost_per_1k
+        latency_ms    = int((time.monotonic() - t0) * 1000)
+        output_tokens = _estimate_tokens(text)
+        cost_usd      = _compute_cost(input_tokens, output_tokens, price_in_1k, price_out_1k)
 
         return Reply(
-            text=text, tokens=tokens, latency_ms=latency_ms,
-            cost_usd=cost_usd, mode=mode, provider=provider, model=model,
+            text          = text,
+            input_tokens  = input_tokens,
+            output_tokens = output_tokens,
+            latency_ms    = latency_ms,
+            cost_usd      = cost_usd,
+            mode          = mode,
+            provider      = provider,
+            model         = model,
         )

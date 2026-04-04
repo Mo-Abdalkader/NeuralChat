@@ -6,6 +6,9 @@
  *   - "Custom model…" option at the bottom of every provider's model list
  *   - Speed badge shown next to each provider label
  *   - Topbar chip shows short model name
+ *   - Per-model input/output pricing from /settings registry
+ *   - Custom model pricing inputs (in_1k / out_1k) appear when Custom is selected
+ *   - Provider-aware key status: Cohere & Groq have shared key, OpenAI & Gemini require own key
  */
 "use strict";
 
@@ -32,51 +35,51 @@ const CFG = {
     "gpt-4o":                  "GPT-4o",
     "gpt-4o-mini":             "GPT-4o mini · best value",
     // Groq
-    "llama-3.3-70b-versatile": "Llama 3.3 70B",
-    "llama-3.1-70b-versatile": "Llama 3.1 70B",
     "llama-3.1-8b-instant":    "Llama 3.1 8B · ultra-fast",
-    "gemma2-9b-it":            "Gemma 2 9B",
+    "llama-3.3-70b-versatile": "Llama 3.3 70B",
+    "groq/compound":           "Compound (flagship)",
+    "groq/compound-mini":      "Compound Mini · fast",
     // Gemini
-    "gemini-2.0-flash":        "Gemini 2.0 Flash · fast",
-    "gemini-2.0-flash-lite":   "Gemini 2.0 Flash Lite · cheapest",
-    "gemini-1.5-pro":          "Gemini 1.5 Pro · best quality",
-    "gemini-1.5-flash":        "Gemini 1.5 Flash",
+    "gemini-3.1-pro-preview":        "Gemini 3.1 Pro (flagship)",
+    "gemini-3-flash-preview":        "Gemini 3 Flash",
+    "gemini-3.1-flash-lite-preview": "Gemini 3.1 Flash Lite · fast",
+    "gemini-2.5-flash":              "Gemini 2.5 Flash",
+    "gemini-2.5-flash-lite":         "Gemini 2.5 Flash Lite · cheapest",
   },
 
   // Sentinel value used for the "Custom" option in the model select
   CUSTOM_SENTINEL: "__custom__",
 
+  // Providers that have a server-side shared key
+  SHARED_KEY_PROVIDERS: ["Cohere", "Groq"],
+
   PROVIDERS_FALLBACK: {
     Cohere: {
-      models:  ["command-a-03-2025","command-r-plus-08-2024","command-r-08-2024","command-r7b-12-2024"],
-      default: "command-a-03-2025",
-      cost:    0.0025,
+      models:  ["command-r7b-12-2024","command-a-03-2025","command-r-plus-08-2024","command-r-08-2024"],
+      default: "command-r7b-12-2024",
       docs:    "https://docs.cohere.com/docs/models",
-      tier:    '<span class="tier-free">✓ Free tier available (20 req/day)</span>',
-      speed:   '<span class="tier-fast">🔵 Balanced</span>',
+      tier:    '<span class="tier-free">✓ Shared key available · add yours for unlimited</span>',
+      speed:   '<span class="tier-bal">🔵 Balanced</span>',
+    },
+    Groq: {
+      models:  ["llama-3.1-8b-instant","llama-3.3-70b-versatile","groq/compound","groq/compound-mini"],
+      default: "llama-3.1-8b-instant",
+      docs:    "https://console.groq.com/docs/models",
+      tier:    '<span class="tier-free">✓ Shared key available · add yours for unlimited</span>',
+      speed:   '<span class="tier-fast">⚡⚡ Ultra-fast</span>',
     },
     OpenAI: {
       models:  ["gpt-4.1","gpt-4.1-mini","gpt-4o","gpt-4o-mini"],
       default: "gpt-4o-mini",
-      cost:    0.0006,
       docs:    "https://platform.openai.com/docs/models",
-      tier:    '<span class="tier-pay">⚡ Pay-as-you-go · no free tier</span>',
+      tier:    '<span class="tier-pay">⚡ Pay-as-you-go · API key required</span>',
       speed:   '<span class="tier-fast">⚡ Fast</span>',
     },
-    Groq: {
-      models:  ["llama-3.3-70b-versatile","llama-3.1-70b-versatile","llama-3.1-8b-instant","gemma2-9b-it"],
-      default: "llama-3.1-8b-instant",
-      cost:    0.00006,
-      docs:    "https://console.groq.com/docs/models",
-      tier:    '<span class="tier-fast">⚡ Free tier — ultra-fast inference</span>',
-      speed:   '<span class="tier-fast">⚡⚡ Ultra-fast</span>',
-    },
     Gemini: {
-      models:  ["gemini-2.0-flash","gemini-2.0-flash-lite","gemini-1.5-pro","gemini-1.5-flash"],
-      default: "gemini-2.0-flash",
-      cost:    0.00035,
+      models:  ["gemini-3.1-pro-preview","gemini-3-flash-preview","gemini-3.1-flash-lite-preview","gemini-2.5-flash","gemini-2.5-flash-lite"],
+      default: "gemini-3.1-pro-preview",
       docs:    "https://ai.google.dev/gemini-api/docs/models/gemini",
-      tier:    '<span class="tier-fast">✓ Free tier available</span>',
+      tier:    '<span class="tier-pay">⚡ API key required · no shared key</span>',
       speed:   '<span class="tier-fast">⚡ Fast</span>',
     },
   },
@@ -118,11 +121,14 @@ const CFG = {
 ═══════════════════════════════════════════ */
 const S = {
   settings:        null,
-  hasDefaultKey:   false,
+  hasDefaultKey:   false,      // true if server has ANY shared key set
+  sharedProviders: [],         // providers that actually have a server-side key
   dailyLimit:      CFG.LIMIT_DEFAULT,
   provider:        "Cohere",
-  model:           "command-a-03-2025",
-  customModel:     "",        // user-typed custom model name
+  model:           "command-r7b-12-2024",
+  customModel:     "",         // user-typed custom model name
+  customPriceIn:   null,       // USD per 1K input tokens for custom model
+  customPriceOut:  null,       // USD per 1K output tokens for custom model
   mode:            "Zero-Shot",
   persona:         "Assistant",
   temperature:     0.7,
@@ -141,7 +147,8 @@ const S = {
   currentHistId:   null,
 };
 
-const PERSIST = ["provider","model","customModel","mode","persona","temperature","maxTokens",
+const PERSIST = ["provider","model","customModel","customPriceIn","customPriceOut",
+                 "mode","persona","temperature","maxTokens",
                  "cotSteps","memoryEnabled","customSysPrompt","apiKey","fsPreset","fsCustom"];
 
 /* ═══════════════════════════════════════════
@@ -161,8 +168,8 @@ const Usage = {
     try{localStorage.setItem(CFG.LS_USAGE,JSON.stringify({date:today,count}));}catch{}
     return count;
   },
-  limitHit(){ return !S.apiKey && !S.hasDefaultKey && this.count() >= S.dailyLimit; },
-  sharedLimitHit(){ return !S.apiKey && S.hasDefaultKey && this.count() >= S.dailyLimit; },
+  /** True when using a shared key and limit is hit */
+  sharedLimitHit(){ return !S.apiKey && _providerHasSharedKey() && this.count() >= S.dailyLimit; },
   usingOwnKey(){ return !!S.apiKey; },
 };
 
@@ -208,7 +215,8 @@ function toast(msg, type="info", ms=2800){
 }
 function timeNow(){ return new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}); }
 function fmtCost(usd){
-  if(!usd)return""; return usd<0.001?`$${(usd*1000).toFixed(3)}m`:`$${usd.toFixed(5)}`;
+  if(!usd||usd===0)return"";
+  return usd<0.000001?`<$0.000001`:usd<0.001?`$${(usd*1000).toFixed(3)}m`:`$${usd.toFixed(5)}`;
 }
 function fmtTok(n){ return !n?"":n>=1000?`${(n/1000).toFixed(1)}k tok`:`${n} tok`; }
 function scrollBottom(smooth=true){
@@ -218,10 +226,16 @@ function scrollBottom(smooth=true){
 function activeKey(){
   return S.apiKey.trim() || "";
 }
+
+/** True if the current provider has a server-side shared key configured */
+function _providerHasSharedKey(){
+  return S.sharedProviders.includes(S.provider);
+}
+
 function canSend(){
-  if(S.apiKey) return true;
-  if(S.hasDefaultKey){ return !Usage.sharedLimitHit(); }
-  return false;
+  if(S.apiKey) return true;                         // own key → always ok
+  if(_providerHasSharedKey()) return !Usage.sharedLimitHit(); // shared key → quota check
+  return false;                                     // no key at all → blocked
 }
 
 /** Return the short display label for a model ID */
@@ -235,6 +249,15 @@ function resolvedModel(){
     return (S.customModel || "").trim();
   }
   return S.model;
+}
+
+/**
+ * Return {in_1k, out_1k} for the currently selected model from the server registry.
+ * Returns null for custom / unknown models.
+ */
+function currentModelPricing(){
+  const m = resolvedModel();
+  return S.settings?.providers?.[S.provider]?.pricing?.[m] || null;
 }
 
 /* ═══════════════════════════════════════════
@@ -452,12 +475,16 @@ const DOM={
     DOM.toggleCustomModelInput(validCurrent === CFG.CUSTOM_SENTINEL);
   },
 
-  // ── Show/hide custom model input below the model dropdown ─
+  // ── Show/hide custom model block (name + pricing inputs) ──
   toggleCustomModelInput(show){
     const wrap=$("customModelWrap"); if(!wrap)return;
     wrap.style.display = show ? "block" : "none";
     if(show){
       const inp=$("customModelInput"); if(inp)inp.value=S.customModel||"";
+      const pi=$("customPriceIn");
+      if(pi)pi.value = S.customPriceIn!=null ? S.customPriceIn : "";
+      const po=$("customPriceOut");
+      if(po)po.value = S.customPriceOut!=null ? S.customPriceOut : "";
     }
   },
 
@@ -612,7 +639,6 @@ const UI={
 
   updateTopbar(){
     const m=$("topbarMode"); if(m)m.textContent=S.mode;
-    // Show short model name in topbar
     const displayModel = S.model===CFG.CUSTOM_SENTINEL
       ? (S.customModel||"custom")
       : shortModel(S.model);
@@ -624,7 +650,7 @@ const UI={
   updateInputHint(){
     const pool=S.settings?.example_prompts?.[S.mode]||[];
     const el=$("inputHint");
-    if(el)el.textContent=pool.length?`↳ ${pool.slice(0,2).map(p=>`"${p.substring(0,44)}"`).join("  ·  ")}`:"";
+    if(el)el.textContent=pool.length?`↳ ${pool.slice(0,2).map(p=>`"${p.substring(0,44)}"`).join("  ·  ")}`:""
   },
 
   updateWelcome(){
@@ -647,13 +673,47 @@ const UI={
     const dot=$("memDot"); if(dot)dot.className=`mem-dot${S.memoryEnabled?" active":""}`;
   },
 
+  /**
+   * Update the model cost line below the model dropdown.
+   * For known models: shows "In: $X.XXXXXX / 1K  ·  Out: $X.XXXXXX / 1K"
+   * For custom models: shows nothing (user entered their own prices).
+   */
+  updateModelCost(){
+    const el=$("modelCost"); if(!el)return;
+    if(S.model === CFG.CUSTOM_SENTINEL){
+      const pin  = S.customPriceIn  != null ? `$${parseFloat(S.customPriceIn).toFixed(6)}` : "—";
+      const pout = S.customPriceOut != null ? `$${parseFloat(S.customPriceOut).toFixed(6)}` : "—";
+      el.innerHTML = `<span style="color:var(--ac-s)">In: ${pin} / 1K</span> &nbsp;·&nbsp; <span style="color:var(--cyan)">Out: ${pout} / 1K</span>`;
+      return;
+    }
+    const pricing = currentModelPricing();
+    if(pricing){
+      el.innerHTML = `<span style="color:var(--ac-s)">In: $${pricing.in_1k.toFixed(6)} / 1K</span> &nbsp;·&nbsp; <span style="color:var(--cyan)">Out: $${pricing.out_1k.toFixed(6)} / 1K</span>`;
+    } else {
+      el.textContent = "";
+    }
+  },
+
   updateProviderUI(){
     const p=CFG.PROVIDERS_FALLBACK[S.provider];
     const tier=$("providerTier");
-    if(tier)tier.innerHTML=(p?.tier||"")+(p?.speed?` <span style="margin-left:6px">${p.speed}</span>`:"");
-    const cost=$("modelCost"); if(cost)cost.textContent=p?`≈ $${p.cost.toFixed(4)} / 1k tokens`:"";
+    if(tier){
+      const speedHtml = p?.speed ? `<span style="margin-left:6px">${p.speed}</span>` : "";
+      tier.innerHTML = (p?.tier||"") + speedHtml;
+    }
     const docs=$("keyDocs");
     if(docs&&p)docs.innerHTML=`Get key → <a href="${p.docs}" target="_blank" rel="noopener">${p.docs.replace("https://","")}</a>`;
+
+    // Update "optional" label and placeholder based on whether this provider has a shared key
+    const hasShared = _providerHasSharedKey();
+    const optEl=$("keyFieldOpt");
+    if(optEl)optEl.textContent = hasShared ? "optional" : "required";
+    const ki=$("apiKeyInput");
+    if(ki)ki.placeholder = hasShared
+      ? "Leave blank to use shared key…"
+      : `Enter your ${S.provider} API key…`;
+
+    UI.updateModelCost();
   },
 
   updateUsage(){
@@ -665,31 +725,42 @@ const UI={
       uf.style.width=`${pct}%`;
       uf.style.background=pct>=100?"linear-gradient(90deg,var(--err),#ff6b6b)":pct>=80?"linear-gradient(90deg,var(--wrn),var(--err))":"linear-gradient(90deg,var(--ac),var(--vio))";
     }
-    const uw=$("usageWrap"); if(uw)uw.style.display=S.apiKey?"none":"block";
+
+    // Show usage meter only when using a shared-key provider without own key
+    const uw=$("usageWrap");
+    if(uw)uw.style.display=(!S.apiKey && _providerHasSharedKey()) ? "block" : "none";
+
+    // Key status line
     const ks=$("keyStatus");
     if(ks){
       if(S.apiKey){
-        ks.className="key-status using-own"; ks.textContent="✓ Using your own key — unlimited access";
-      } else if(S.hasDefaultKey){
-        ks.className="key-status using-shared"; ks.textContent=`Using shared key — ${Math.max(0,limit-count)} / ${limit} free requests remaining today`;
+        ks.className="key-status using-own";
+        ks.textContent="✓ Using your own key — unlimited access";
+      } else if(_providerHasSharedKey()){
+        ks.className="key-status using-shared";
+        ks.textContent=`Using shared key — ${Math.max(0,limit-count)} / ${limit} free requests remaining today`;
       } else {
-        ks.className="key-status"; ks.textContent="";
+        ks.className="key-status key-required";
+        ks.textContent=`No shared key for ${S.provider} — enter your API key to continue`;
       }
     }
+
+    // Banner
     const banner=$("apiBanner");
     if(banner){
       if(Usage.sharedLimitHit()){
         banner.className="api-banner visible";
         const t=$("bannerTitle"); if(t)t.textContent="Daily free limit reached";
         const sb=$("bannerSub"); if(sb)sb.textContent="Add your own API key below to continue";
-      } else if(!S.hasDefaultKey&&!S.apiKey){
+      } else if(!_providerHasSharedKey()&&!S.apiKey){
         banner.className="api-banner visible";
-        const t=$("bannerTitle"); if(t)t.textContent="No API key";
-        const sb=$("bannerSub"); if(sb)sb.textContent="Enter your API key to start chatting";
+        const t=$("bannerTitle"); if(t)t.textContent=`API key required`;
+        const sb=$("bannerSub"); if(sb)sb.textContent=`${S.provider} has no shared key — enter yours to start chatting`;
       } else {
         banner.className="api-banner";
       }
     }
+
     const dot=$("statusDot");
     if(dot&&!S.streaming) dot.className=`status-dot ${canSend()?"online":"error"}`;
   },
@@ -761,22 +832,31 @@ const App={
       S.hasDefaultKey  = settings.has_default_key  || false;
       S.dailyLimit     = settings.daily_free_limit  || CFG.LIMIT_DEFAULT;
 
+      // Derive which providers have a server-side shared key from /usage
+      // Fall back to the client-side constant list when the endpoint isn't available
+      try{
+        const usageData = await fetch(`${CFG.BASE}/usage`).then(r=>r.json());
+        S.sharedProviders = Object.entries(usageData.has_default||{})
+          .filter(([,v])=>v).map(([k])=>k);
+      }catch{
+        S.sharedProviders = [...CFG.SHARED_KEY_PROVIDERS];
+      }
+
       if(!settings.providers[S.provider]) S.provider=settings.active_provider;
       const pMods=settings.providers[S.provider]?.models||[];
       if(S.model !== CFG.CUSTOM_SENTINEL && !pMods.includes(S.model)){
         S.model=settings.providers[S.provider]?.default_model||pMods[0]||S.model;
       }
 
-      // Sync Gemini into fallback if server returned it (for future-proofing)
+      // Sync any new providers from the server into fallback (future-proofing)
       for(const [name, info] of Object.entries(settings.providers)){
         if(!CFG.PROVIDERS_FALLBACK[name]){
           CFG.PROVIDERS_FALLBACK[name]={
             models:  info.models,
             default: info.default_model,
-            cost:    info.cost_per_1k,
             docs:    info.docs_url,
             tier:    "",
-            speed:   "",
+            speed:   info.speed_label||"",
           };
         }
       }
@@ -791,6 +871,7 @@ const App={
       UI.updatePersonaTip();
     }catch(err){
       toast(`Cannot reach API: ${err.message}`,"error",6000);
+      S.sharedProviders = [...CFG.SHARED_KEY_PROVIDERS];
       DOM.populatePersonas({
         Assistant:       {icon:"🤖",tip:"Balanced general-purpose responses."},
         Engineer:        {icon:"💻",tip:"Production code with explanations."},
@@ -822,21 +903,35 @@ const App={
     const mods=(S.settings?.providers?.[S.provider]?.models)||p?.models||[];
     S.model = p?.default || mods[0] || S.model;
     S.customModel = "";
+    S.customPriceIn = null;
+    S.customPriceOut = null;
     DOM.populateModels(S.provider, S.model);
-    UI.updateTopbar(); UI.updateProviderUI(); saveState();
+    UI.updateTopbar(); UI.updateProviderUI(); UI.updateUsage(); saveState();
   },
 
   onModelChange(){
     const val=$("modelSel")?.value||S.model;
     S.model = val;
     DOM.toggleCustomModelInput(val === CFG.CUSTOM_SENTINEL);
-    if(val !== CFG.CUSTOM_SENTINEL) S.customModel = "";
-    UI.updateTopbar(); saveState();
+    if(val !== CFG.CUSTOM_SENTINEL){
+      S.customModel = "";
+      S.customPriceIn = null;
+      S.customPriceOut = null;
+    }
+    UI.updateTopbar(); UI.updateModelCost(); saveState();
   },
 
   onCustomModelChange(v){
     S.customModel = v.trim();
     UI.updateTopbar(); saveState();
+  },
+
+  onCustomPriceChange(){
+    const pi=$("customPriceIn"),  piv=pi?.value.trim();
+    const po=$("customPriceOut"), pov=po?.value.trim();
+    S.customPriceIn  = piv  ? parseFloat(piv)  : null;
+    S.customPriceOut = pov ? parseFloat(pov) : null;
+    UI.updateModelCost(); saveState();
   },
 
   /* Mode */
@@ -868,7 +963,7 @@ const App={
 
   /* API Key */
   onApiKeyChange(v){
-    S.apiKey=v.trim(); UI.updateUsage(); saveState();
+    S.apiKey=v.trim(); UI.updateUsage(); UI.updateProviderUI(); saveState();
   },
   toggleKeyVis(){
     const inp=$("apiKeyInput"),s=$("eyeShow"),h=$("eyeHide"); if(!inp)return;
@@ -920,8 +1015,9 @@ const App={
     if(S.streaming)return;
     const ta=$("msgInput"); const text=ta?.value.trim(); if(!text)return;
 
-    if(!S.hasDefaultKey&&!S.apiKey){
-      toast("No API key available — add your key in the sidebar","error");
+    // Gate: no key and no shared key for this provider
+    if(!_providerHasSharedKey()&&!S.apiKey){
+      toast(`${S.provider} requires your own API key — add it in the sidebar`,"error",5000);
       App.focusKeyInput(); return;
     }
     if(Usage.sharedLimitHit()){
@@ -950,6 +1046,9 @@ const App={
       temperature:S.temperature, max_tokens:S.maxTokens,
       memory_enabled:S.memoryEnabled, cot_steps:S.cotSteps,
       examples, custom_system_prompt:S.customSysPrompt, session_id:S.sessionId,
+      // Custom model pricing — server ignores these for known models
+      custom_price_in_1k:  S.model===CFG.CUSTOM_SENTINEL ? (S.customPriceIn  ?? null) : null,
+      custom_price_out_1k: S.model===CFG.CUSTOM_SENTINEL ? (S.customPriceOut ?? null) : null,
     };
 
     if(ta){ta.value="";App.autoResize(ta);}

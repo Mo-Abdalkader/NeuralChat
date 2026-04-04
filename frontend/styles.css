@@ -153,6 +153,7 @@ body{display:flex;position:relative}
 .tier-free{color:var(--ok)}
 .tier-pay{color:var(--wrn)}
 .tier-fast{color:var(--cyan)}
+.tier-bal{color:#60a5fa}
 .model-cost{font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:4px}
 
 /* Key section */
@@ -164,6 +165,7 @@ body{display:flex;position:relative}
 .key-status{font-size:9px;font-family:var(--mono);margin-top:5px;padding:4px 8px;border-radius:4px}
 .key-status.using-shared{background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);color:var(--ac-s)}
 .key-status.using-own{background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);color:var(--ok)}
+.key-status.key-required{background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.25);color:var(--wrn)}
 .key-docs{font-size:9px;color:var(--t4);font-family:var(--mono);margin-top:5px}
 .key-docs a{color:var(--ac-s);text-decoration:none}
 .key-docs a:hover{text-decoration:underline}
@@ -388,6 +390,18 @@ body:has(.sidebar.collapsed) .app-footer{left:0;width:100%}
 .footer-sep{color:var(--t4);pointer-events:none;font-size:10px}
 .app-footer a{color:#5b9cf6;text-decoration:underline;text-decoration-color:rgba(91,156,246,.35);text-underline-offset:3px;text-decoration-thickness:1px;font-weight:500;font-size:11px;pointer-events:all;transition:color .2s,text-decoration-color .2s;cursor:pointer}
 .app-footer a:hover{color:#93c5fd;text-decoration-color:rgba(147,197,253,.65)}
+
+/* ── Custom model pricing inputs ── */
+.custom-price-wrap{margin-top:8px;padding:8px 10px;background:rgba(99,102,241,.04);border:1px solid rgba(99,102,241,.15);border-radius:var(--rxs);animation:fadeUp .18s ease}
+.custom-price-row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.custom-price-field{display:flex;flex-direction:column;gap:4px}
+.custom-price-lbl{font-size:8px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--t4);font-family:var(--mono)}
+.custom-price-input{padding:6px 8px;font-size:11px;width:100%}
+/* remove browser spinner arrows on number inputs */
+.custom-price-input::-webkit-outer-spin-button,
+.custom-price-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.custom-price-input[type=number]{-moz-appearance:textfield}
+.custom-price-hint{font-size:9px;color:var(--t4);font-family:var(--mono);margin-top:5px;text-align:center}
 
 /* Responsive */
 @media(max-width:700px){
