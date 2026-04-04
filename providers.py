@@ -1,60 +1,89 @@
 """
-providers.py — NeuralChat v5.2
-Isolated provider registry. Models verified as active March 2026.
+providers.py — NeuralChat v6.3
 
 To add a new provider:
   1. Add an entry to PROVIDERS dict below.
   2. Add a branch in build_llm().
   3. Done — nothing else changes.
-
-Retired models (DO NOT USE):
-  Cohere:  command-r-plus, command-r, command-light  (retired Sep 2025)
-  Groq:    llama3-70b-8192, llama3-8b-8192           (retired May 2025)
-           mixtral-8x7b-32768, gemma-7b-it            (retired 2025)
 """
 
 from __future__ import annotations
+import hashlib
+
+# ── LLM instance cache ────────────────────────────────────────
+# Key: (provider, model, api_key_hash, temperature, max_tokens)
+# Reusing instances avoids re-establishing HTTPS connections on every request.
+_LLM_CACHE: dict[tuple, object] = {}
+
+
+def _cache_key(provider: str, model: str, api_key: str, temperature: float, max_tokens: int) -> tuple:
+    """Build a cache key that never stores the raw API key."""
+    key_hash = hashlib.sha256(api_key.encode()).hexdigest()[:16]
+    return (provider, model, key_hash, temperature, max_tokens)
+
 
 # ── Provider registry ─────────────────────────────────────────
 PROVIDERS: dict[str, dict] = {
     "Cohere": {
-        "label":         "Cohere",
-        "default_model": "command-a-03-2025",
+        "label": "Cohere",
+        "default_model": "command-r7b-12-2024",
         "models": [
-            "command-a-03-2025",        # flagship, 256k ctx — recommended
-            "command-r-plus-08-2024",   # strong, 128k ctx
-            "command-r-08-2024",        # balanced, 128k ctx
-            "command-r7b-12-2024",      # fast & cheap, 128k ctx
+            "command-r7b-12-2024",
+            "command-a-03-2025",
+            "command-r-plus-08-2024",
+            "command-r-08-2024",
+            "__custom__",
         ],
-        "api_key":     "",              # set via UI
-        "cost_per_1k": 0.0025,
-        "docs_url":    "https://docs.cohere.com/docs/models",
+        "api_key": "",
+        "cost_per_1k": 0.0000,
+        "docs_url": "https://docs.cohere.com/docs/models",
+        "speed_label": "",  # 🔵 Balanced
     },
     "OpenAI": {
-        "label":         "OpenAI",
+        "label": "OpenAI",
         "default_model": "gpt-4o-mini",
         "models": [
-            "gpt-4.1",                  # latest flagship
-            "gpt-4.1-mini",             # fast & affordable
-            "gpt-4o",                   # vision-capable
-            "gpt-4o-mini",              # default — best value
+            "gpt-4.1",
+            "gpt-4.1-mini",
+            "gpt-4o",
+            "gpt-4o-mini",
+            "__custom__",
         ],
-        "api_key":     "",
-        "cost_per_1k": 0.0006,
-        "docs_url":    "https://platform.openai.com/docs/models",
+        "api_key": "",
+        "cost_per_1k": 0.0000,
+        "docs_url": "https://platform.openai.com/docs/models",
+        "speed_label": "",  # ⚡ Fast
     },
     "Groq": {
-        "label":         "Groq",
+        "label": "Groq",
         "default_model": "llama-3.1-8b-instant",
         "models": [
-            "llama-3.3-70b-versatile",  # best quality on Groq
-            "llama-3.1-70b-versatile",  # strong, 128k ctx
-            "llama-3.1-8b-instant",     # default — extremely fast & free
-            "gemma2-9b-it",             # Google Gemma 2, 8k ctx
+            "llama-3.1-8b-instant",
+            "llama-3.3-70b-versatile",
+            "groq/compound",
+            "groq/compound-mini",
+            "__custom__",
         ],
-        "api_key":     "",
-        "cost_per_1k": 0.00006,
-        "docs_url":    "https://console.groq.com/docs/models",
+        "api_key": "",
+        "cost_per_1k": 0.0000,
+        "docs_url": "https://console.groq.com/docs/models",
+        "speed_label": "",  # ⚡⚡ Ultra-fast
+    },
+    "Gemini": {
+        "label": "Gemini",
+        "default_model": "gemini-3.1-pro-preview",
+        "models": [
+            "gemini-3.1-pro-preview",
+            "gemini-3-flash-preview",
+            "gemini-3.1-flash-lite-preview",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+            "__custom__",
+        ],
+        "api_key": "",
+        "cost_per_1k": 0.0000,
+        "docs_url": "https://ai.google.dev/gemini-api/docs/models/gemini",
+        "speed_label": "",  # ⚡ Fast
     },
 }
 
@@ -67,14 +96,26 @@ def get_provider(name: str | None = None) -> dict:
 
 def build_llm(provider_name: str, model: str, temperature: float, max_tokens: int, api_key: str):
     """
-    Isolated LLM builder.
-    api_key is passed explicitly — no global state, no Streamlit imports.
+    Return a cached LLM instance when possible, otherwise build and cache a new one.
+    api_key is passed explicitly — no global state.
     """
     if not api_key:
         raise ValueError(
             f"No API key provided for {provider_name}. "
             f"Go to ⚙ Settings → API Keys and enter your key."
         )
+
+    ck = _cache_key(provider_name, model, api_key, temperature, max_tokens)
+    if ck in _LLM_CACHE:
+        return _LLM_CACHE[ck]
+
+    llm = _build_fresh(provider_name, model, temperature, max_tokens, api_key)
+    _LLM_CACHE[ck] = llm
+    return llm
+
+
+def _build_fresh(provider_name: str, model: str, temperature: float, max_tokens: int, api_key: str):
+    """Construct a brand-new LLM instance (called only on cache miss)."""
 
     if provider_name == "Cohere":
         from langchain_cohere import ChatCohere
@@ -101,6 +142,15 @@ def build_llm(provider_name: str, model: str, temperature: float, max_tokens: in
             model_name=model,
             temperature=temperature,
             max_tokens=max_tokens,
+        )
+
+    if provider_name == "Gemini":
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        return ChatGoogleGenerativeAI(
+            google_api_key=api_key,
+            model=model,
+            temperature=temperature,
+            max_output_tokens=max_tokens,
         )
 
     raise ValueError(f"Unknown provider: '{provider_name}'. Add it to providers.py.")

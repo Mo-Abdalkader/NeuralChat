@@ -12,7 +12,7 @@
 
 ## What it does
 
-NeuralChat lets you chat with AI models from Cohere, OpenAI, and Groq — switching providers and models from the UI with no code changes. It goes beyond a basic API wrapper by letting you control *how* the AI reasons, not just *what* you ask.
+NeuralChat lets you chat with AI models from Cohere, OpenAI, Groq, and Gemini — switching providers and models from the UI with no code changes. It goes beyond a basic API wrapper by letting you control *how* the AI reasons, not just *what* you ask.
 
 ---
 
@@ -20,8 +20,9 @@ NeuralChat lets you chat with AI models from Cohere, OpenAI, and Groq — switch
 
 | Feature | Details |
 |---|---|
-| **3 AI providers** | Cohere · OpenAI · Groq |
-| **10+ models** | command-a-03-2025, GPT-4o, Llama 3.3 70B and more |
+| **4 AI providers** | Cohere · OpenAI · Groq · Gemini |
+| **14+ models** | command-a-03-2025, GPT-4.1, Llama 3.3 70B, Gemini 2.0 Flash and more |
+| **Custom model name** | Type any model ID not in the preset list |
 | **4 prompting modes** | Zero-Shot, Few-Shot, Chain-of-Thought, Structured Output |
 | **6 personas** | Assistant, Engineer, Analyst, Writer, Teacher, Data Scientist |
 | **Streaming** | Word-by-word SSE responses with live typing indicator |
@@ -51,7 +52,7 @@ NeuralChat lets you chat with AI models from Cohere, OpenAI, and Groq — switch
 neuralchat/
 ├── main.py          # FastAPI routes, SSE streaming, static file serving
 ├── engine.py        # LangChain engine — runner dispatch, memory management
-├── providers.py     # LLM builder — Cohere, OpenAI, Groq abstraction
+├── providers.py     # LLM builder — Cohere, OpenAI, Groq, Gemini abstraction + instance cache
 ├── config.py        # All constants — modes, personas, presets, prompts
 ├── schemas.py       # Pydantic request/response models
 ├── requirements.txt
@@ -81,7 +82,8 @@ Open `http://localhost:8000`. Enter your API key in the sidebar.
 **Get free keys:**
 - Cohere → https://dashboard.cohere.com/api-keys
 - OpenAI → https://platform.openai.com/api-keys
-- Groq → https://console.groq.com/keys *(free, extremely fast)*
+- Groq   → https://console.groq.com/keys *(free, extremely fast)*
+- Gemini → https://aistudio.google.com/app/apikey *(free tier available)*
 
 ---
 
@@ -106,15 +108,86 @@ Railway dashboard → **New Project → Deploy from GitHub repo → Generate Dom
 
 ## Adding a new provider
 
-Edit `providers.py` only:
+The codebase is designed so that adding a provider touches exactly **two places**.
+
+**Step 1 — Install the LangChain package**
+
+```bash
+pip install langchain-mistralai        # example: Mistral
+```
+
+Add it to `requirements.txt`:
+
+```
+langchain-mistralai>=0.1.0
+```
+
+**Step 2 — Register the provider in `providers.py`**
+
+Add an entry to the `PROVIDERS` dict:
+
+```python
+"Mistral": {
+    "label":         "Mistral",
+    "default_model": "mistral-large-latest",
+    "models": [
+        "mistral-large-latest",
+        "mistral-small-latest",
+        "codestral-latest",
+        "__custom__",               # keep this to allow custom model names
+    ],
+    "api_key":     "",
+    "cost_per_1k": 0.002,
+    "docs_url":    "https://docs.mistral.ai/getting-started/models/",
+    "speed_label": "⚡ Fast",
+},
+```
+
+Then add a branch in `build_llm()` (in the same file):
 
 ```python
 if provider_name == "Mistral":
     from langchain_mistralai import ChatMistralAI
-    return ChatMistralAI(api_key=api_key, model=model, temperature=temperature)
+    return ChatMistralAI(
+        api_key=api_key,
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
 ```
 
-Add the provider entry to the `PROVIDERS` dict in the same file. Nothing else changes.
+**Step 3 — Add the provider to the frontend fallback in `script.js`**
+
+In `CFG.PROVIDERS_FALLBACK`:
+
+```javascript
+Mistral: {
+  models:  ["mistral-large-latest","mistral-small-latest","codestral-latest"],
+  default: "mistral-large-latest",
+  cost:    0.002,
+  docs:    "https://docs.mistral.ai/getting-started/models/",
+  tier:    '<span class="tier-pay">⚡ Pay-as-you-go</span>',
+  speed:   '<span class="tier-fast">⚡ Fast</span>',
+},
+```
+
+**Step 4 — Add the provider option to `index.html`**
+
+```html
+<option value="Mistral">Mistral</option>
+```
+
+**Step 5 — (Optional) Add short model display names in `script.js`**
+
+In `CFG.MODEL_SHORT`:
+
+```javascript
+"mistral-large-latest":  "Mistral Large",
+"mistral-small-latest":  "Mistral Small · fast",
+"codestral-latest":      "Codestral · code",
+```
+
+That's it. `engine.py`, `main.py`, and `schemas.py` require no changes.
 
 ---
 
@@ -135,7 +208,7 @@ Add the provider entry to the `PROVIDERS` dict in the same file. Nothing else ch
 ## Tech stack
 
 - **Backend** — FastAPI, LangChain Core, Pydantic v2, Uvicorn
-- **Providers** — `langchain-cohere`, `langchain-openai`, `langchain-groq`
+- **Providers** — `langchain-cohere`, `langchain-openai`, `langchain-groq`, `langchain-google-genai`
 - **Frontend** — Vanilla HTML/CSS/JS, marked.js, highlight.js
 - **Deployment** — Railway (Nixpacks, no Docker needed)
 

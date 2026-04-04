@@ -1,4 +1,4 @@
-"""main.py — NeuralChat v6.2
+"""main.py — NeuralChat v6.3
 
 Run:
     uvicorn main:app --reload --port 8000
@@ -86,13 +86,20 @@ def _persona_prompt(name: str, custom: str) -> str:
 
 
 def _validate(mode: str, provider: str, model: str) -> None:
-    """Raise 400 if mode, provider, or model is not recognised."""
+    """
+    Raise 400 if mode or provider is unknown.
+    Model validation is intentionally relaxed — any non-empty string is accepted
+    so users can supply custom model names not in the preset list.
+    """
     if mode not in MODES:
         raise HTTPException(400, f"Unknown mode '{mode}'.")
     if provider not in PROVIDERS:
         raise HTTPException(400, f"Unknown provider '{provider}'.")
-    if model not in PROVIDERS[provider]["models"]:
-        raise HTTPException(400, f"Model '{model}' not available for {provider}.")
+    if not model or not model.strip():
+        raise HTTPException(400, "Model name cannot be empty.")
+    # '__custom__' sentinel must have been replaced by the actual name before reaching here
+    if model == "__custom__":
+        raise HTTPException(400, "Select 'Custom model…' and enter a model name.")
 
 
 def _coerce_examples(raw) -> list[dict] | None:
@@ -188,8 +195,9 @@ async def stream_chat(req: StreamRequest):
             reply = await asyncio.get_event_loop().run_in_executor(
                 None, lambda: _engine.chat(**kwargs)
             )
-            for i, word in enumerate(reply.text.split(" ")):
-                chunk = word + (" " if i < len(reply.text.split(" ")) - 1 else "")
+            words = reply.text.split(" ")
+            for i, word in enumerate(words):
+                chunk = word + (" " if i < len(words) - 1 else "")
                 yield f"data: {json.dumps({'type':'token','content':chunk})}\n\n"
                 await asyncio.sleep(0.010)
             yield f"data: {json.dumps({'type':'done','tokens':reply.tokens,'latency_ms':reply.latency_ms,'cost_usd':reply.cost_usd,'mode':reply.mode,'provider':reply.provider,'model':reply.model})}\n\n"
@@ -218,19 +226,28 @@ async def reset_memory(req: ResetMemoryRequest = ResetMemoryRequest()):
 @app.get("/settings", response_model=SettingsResponse)
 async def get_settings():
     """Return all provider, mode, persona, and server configuration to the frontend."""
+    # Expose preset models only (filter out the __custom__ sentinel)
+    def visible_models(models: list[str]) -> list[str]:
+        return [m for m in models if m != "__custom__"]
+
     return SettingsResponse(
         providers={
             name: ProviderInfo(
-                label=p["label"], default_model=p["default_model"],
-                models=p["models"], cost_per_1k=p["cost_per_1k"], docs_url=p["docs_url"],
+                label         = p["label"],
+                default_model = p["default_model"],
+                models        = visible_models(p["models"]),
+                cost_per_1k   = p["cost_per_1k"],
+                docs_url      = p["docs_url"],
             )
             for name, p in PROVIDERS.items()
         },
         active_provider=ACTIVE_PROVIDER,
         modes={
             name: ModeInfo(
-                icon=m["icon"], description=m["description"],
-                when_to_use=m["when_to_use"], example=m["example"],
+                icon        = m["icon"],
+                description = m["description"],
+                when_to_use = m["when_to_use"],
+                example     = m["example"],
             )
             for name, m in MODES.items()
         },
@@ -240,18 +257,22 @@ async def get_settings():
         },
         few_shot_presets={
             name: FewShotPreset(
-                description=pr["description"],
-                examples=[FewShotExample(input=e["input"], output=e["output"]) for e in pr["examples"]],
+                description = pr["description"],
+                examples    = [FewShotExample(input=e["input"], output=e["output"]) for e in pr["examples"]],
             )
             for name, pr in FEW_SHOT_PRESETS.items()
         },
         example_prompts=EXAMPLE_PROMPTS,
         defaults={
-            "provider": ACTIVE_PROVIDER,
-            "model":    PROVIDERS[ACTIVE_PROVIDER]["default_model"],
-            "mode":     "Zero-Shot", "persona": "Assistant",
-            "temperature": 0.7, "max_tokens": 1024,
-            "cot_steps": 3, "memory_enabled": True, "memory_depth": 5,
+            "provider":       ACTIVE_PROVIDER,
+            "model":          PROVIDERS[ACTIVE_PROVIDER]["default_model"],
+            "mode":           "Zero-Shot",
+            "persona":        "Assistant",
+            "temperature":    0.7,
+            "max_tokens":     1024,
+            "cot_steps":      3,
+            "memory_enabled": True,
+            "memory_depth":   5,
         },
         has_default_key  = bool(_DEFAULT_API_KEY),
         daily_free_limit = _DAILY_FREE_LIMIT,

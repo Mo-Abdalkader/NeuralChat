@@ -1,7 +1,7 @@
-"""config.py — NeuralChat v6.2"""
+"""config.py — NeuralChat v6.3"""
 
 APP_NAME    = "NeuralChat"
-APP_VERSION = "6.2.0"
+APP_VERSION = "6.3.0"
 
 DEVELOPER = {
     "name":       "Mohamed Abdalkader",
@@ -19,10 +19,10 @@ DEVELOPER = {
         "FastAPI", "Docker", "MLflow", "Azure", "AWS", "FAISS", "Streamlit",
     ],
     "links": {
-        "GitHub":   "https://github.com/Mo-Abdalkader",
-        "LinkedIn": "https://linkedin.com/in/MohamedAbdalkader",
-        "Portfolio":"https://mo-abdalkader.github.io/Portfolio",
-        "Email":    "mailto:contact@mohamed-ai.dev",
+        "GitHub":    "https://github.com/Mo-Abdalkader",
+        "LinkedIn":  "https://linkedin.com/in/MohamedAbdalkader",
+        "Portfolio": "https://mo-abdalkader.github.io/Portfolio",
+        "Email":     "mailto:contact@mohamed-ai.dev",
     },
 }
 

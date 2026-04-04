@@ -27,14 +27,14 @@
     <img src="/static/logo.png" alt="NeuralChat" class="sb-logo-img"/>
     <div class="sb-brand-text">
       <div class="sb-name">NeuralChat</div>
-      <div class="sb-ver">v6.0 · FastAPI</div>
+      <div class="sb-ver">v6.3 · FastAPI</div>
     </div>
     <button class="icon-btn" onclick="App.toggleSidebar()" title="Collapse">
       <svg viewBox="0 0 24 24"><path d="M11 19l-7-7 7-7M18 19l-7-7 7-7"/></svg>
     </button>
   </div>
 
-  <!-- Usage meter (hidden when user has own key) -->
+  <!-- Usage meter -->
   <div class="usage-wrap" id="usageWrap">
     <div class="usage-row">
       <span class="usage-lbl" id="usageLbl">Free requests today</span>
@@ -74,6 +74,7 @@
               <option value="Cohere">Cohere</option>
               <option value="OpenAI">OpenAI</option>
               <option value="Groq">Groq</option>
+              <option value="Gemini">Gemini</option>
             </select>
             <div class="provider-tier" id="providerTier"></div>
           </div>
@@ -81,12 +82,22 @@
           <div class="field-group">
             <label class="field-lbl">Model</label>
             <select id="modelSel" class="nc-select" onchange="App.onModelChange()">
-              <option value="command-a-03-2025">command-a-03-2025</option>
-              <option value="command-r-plus-08-2024">command-r-plus-08-2024</option>
-              <option value="command-r-08-2024">command-r-08-2024</option>
-              <option value="command-r7b-12-2024">command-r7b-12-2024</option>
+              <!-- populated by script.js -->
             </select>
             <div class="model-cost" id="modelCost"></div>
+
+            <!-- Custom model name input — shown only when "Custom model…" is selected -->
+            <div id="customModelWrap" style="display:none;margin-top:7px">
+              <input
+                type="text"
+                id="customModelInput"
+                class="nc-input"
+                placeholder="e.g. gpt-4-turbo or gemini-1.0-pro"
+                autocomplete="off"
+                spellcheck="false"
+                oninput="App.onCustomModelChange(this.value)"
+              />
+            </div>
           </div>
 
           <div class="field-group" id="keyFieldGroup">
@@ -251,7 +262,7 @@
     </div>
     <div class="topbar-chips">
       <span class="topbar-chip chip-mode" id="topbarMode">Zero-Shot</span>
-      <span class="topbar-chip chip-model" id="topbarModel">Cohere · command-a-03-2025</span>
+      <span class="topbar-chip chip-model" id="topbarModel">Cohere · command-a (flagship)</span>
       <span class="status-dot" id="statusDot"></span>
     </div>
     <div class="topbar-actions">

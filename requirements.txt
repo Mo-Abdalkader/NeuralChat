@@ -10,9 +10,10 @@ langchain-core>=0.3.0
 
 # Providers (uncomment as needed)
 langchain-cohere>=0.3.0
-cohere>=5.0.0
-# langchain-openai>=0.1.0
-# langchain-groq>=0.1.0
+cohere>=5.0.0 # The default
+langchain-openai>=0.1.0
+langchain-groq>=0.1.0
+langchain-google-genai>=2.0.0
 
 # Utilities
 pydantic>=2.0.0

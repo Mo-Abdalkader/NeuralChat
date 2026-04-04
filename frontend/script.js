@@ -1,7 +1,11 @@
 /**
- * NeuralChat v6.1 — script.js
- * Fixed: models always populate · accordion sidebar · env-var default key
- * Space aurora bg · cursor glow · usage quota · chat history · per-msg download
+ * NeuralChat v6.3 — script.js
+ * Changes vs v6.2:
+ *   - Gemini provider added to PROVIDERS_FALLBACK
+ *   - Model dropdown shows short display names (e.g. "command-r7b") not full IDs
+ *   - "Custom model…" option at the bottom of every provider's model list
+ *   - Speed badge shown next to each provider label
+ *   - Topbar chip shows short model name
  */
 "use strict";
 
@@ -9,30 +13,74 @@
    CONFIG
 ═══════════════════════════════════════════ */
 const CFG = {
-  BASE:         window.location.origin,
-  LIMIT_DEFAULT: 20,          // fallback if /settings doesn't return daily_free_limit
-  LS_STATE:     "nc_v61_state",
-  LS_HIST:      "nc_v61_hist",
-  LS_USAGE:     "nc_v61_usage",
-  // Static fallback provider data used BEFORE /settings loads
-  // so selects are never empty on page load
+  BASE:          window.location.origin,
+  LIMIT_DEFAULT: 20,
+  LS_STATE:      "nc_v63_state",
+  LS_HIST:       "nc_v63_hist",
+  LS_USAGE:      "nc_v63_usage",
+
+  // Short display name for each full model ID shown in the dropdown
+  MODEL_SHORT: {
+    // Cohere
+    "command-a-03-2025":       "command-a (flagship)",
+    "command-r-plus-08-2024":  "command-r-plus",
+    "command-r-08-2024":       "command-r",
+    "command-r7b-12-2024":     "command-r7b · fast",
+    // OpenAI
+    "gpt-4.1":                 "GPT-4.1 (flagship)",
+    "gpt-4.1-mini":            "GPT-4.1 mini · fast",
+    "gpt-4o":                  "GPT-4o",
+    "gpt-4o-mini":             "GPT-4o mini · best value",
+    // Groq
+    "llama-3.3-70b-versatile": "Llama 3.3 70B",
+    "llama-3.1-70b-versatile": "Llama 3.1 70B",
+    "llama-3.1-8b-instant":    "Llama 3.1 8B · ultra-fast",
+    "gemma2-9b-it":            "Gemma 2 9B",
+    // Gemini
+    "gemini-2.0-flash":        "Gemini 2.0 Flash · fast",
+    "gemini-2.0-flash-lite":   "Gemini 2.0 Flash Lite · cheapest",
+    "gemini-1.5-pro":          "Gemini 1.5 Pro · best quality",
+    "gemini-1.5-flash":        "Gemini 1.5 Flash",
+  },
+
+  // Sentinel value used for the "Custom" option in the model select
+  CUSTOM_SENTINEL: "__custom__",
+
   PROVIDERS_FALLBACK: {
     Cohere: {
-      models: ["command-a-03-2025","command-r-plus-08-2024","command-r-08-2024","command-r7b-12-2024"],
-      default: "command-a-03-2025", cost: 0.0025, docs: "https://docs.cohere.com/docs/models",
-      tier: '<span class="tier-free">✓ Free tier available (20 req/day)</span>',
+      models:  ["command-a-03-2025","command-r-plus-08-2024","command-r-08-2024","command-r7b-12-2024"],
+      default: "command-a-03-2025",
+      cost:    0.0025,
+      docs:    "https://docs.cohere.com/docs/models",
+      tier:    '<span class="tier-free">✓ Free tier available (20 req/day)</span>',
+      speed:   '<span class="tier-fast">🔵 Balanced</span>',
     },
     OpenAI: {
-      models: ["gpt-4.1","gpt-4.1-mini","gpt-4o","gpt-4o-mini"],
-      default: "gpt-4o-mini", cost: 0.0006, docs: "https://platform.openai.com/docs/models",
-      tier: '<span class="tier-pay">⚡ Pay-as-you-go · no free tier</span>',
+      models:  ["gpt-4.1","gpt-4.1-mini","gpt-4o","gpt-4o-mini"],
+      default: "gpt-4o-mini",
+      cost:    0.0006,
+      docs:    "https://platform.openai.com/docs/models",
+      tier:    '<span class="tier-pay">⚡ Pay-as-you-go · no free tier</span>',
+      speed:   '<span class="tier-fast">⚡ Fast</span>',
     },
     Groq: {
-      models: ["llama-3.3-70b-versatile","llama-3.1-70b-versatile","llama-3.1-8b-instant","gemma2-9b-it"],
-      default: "llama-3.1-8b-instant", cost: 0.00006, docs: "https://console.groq.com/docs/models",
-      tier: '<span class="tier-fast">⚡ Free tier — ultra-fast inference</span>',
+      models:  ["llama-3.3-70b-versatile","llama-3.1-70b-versatile","llama-3.1-8b-instant","gemma2-9b-it"],
+      default: "llama-3.1-8b-instant",
+      cost:    0.00006,
+      docs:    "https://console.groq.com/docs/models",
+      tier:    '<span class="tier-fast">⚡ Free tier — ultra-fast inference</span>',
+      speed:   '<span class="tier-fast">⚡⚡ Ultra-fast</span>',
+    },
+    Gemini: {
+      models:  ["gemini-2.0-flash","gemini-2.0-flash-lite","gemini-1.5-pro","gemini-1.5-flash"],
+      default: "gemini-2.0-flash",
+      cost:    0.00035,
+      docs:    "https://ai.google.dev/gemini-api/docs/models/gemini",
+      tier:    '<span class="tier-fast">✓ Free tier available</span>',
+      speed:   '<span class="tier-fast">⚡ Fast</span>',
     },
   },
+
   MODES_INFO: {
     "Zero-Shot": {
       icon:"○", badge:"Direct",
@@ -55,13 +103,6 @@ const CFG = {
       example:"A bat and ball cost $1.10. The bat costs $1 more. How much is the ball?",
       color:"var(--cyan)",
     },
-    // "Memory Chain": {
-    //   icon:"◉", badge:"Memory",
-    //   desc:"The model maintains full conversation history across all turns. True multi-turn memory — it knows everything said earlier.",
-    //   use:"Long conversations, tutoring, interviews, progressive tasks, role-play.",
-    //   example:"My name is Alex. I work with Spark. [later] What should I learn next?",
-    //   color:"var(--ok)",
-    // },
     "Structured Output": {
       icon:"▣", badge:"Structured",
       desc:"Forces a JSON response with answer, confidence level (High/Medium/Low), key points, and a follow-up question. Perfect for structured data.",
@@ -77,10 +118,11 @@ const CFG = {
 ═══════════════════════════════════════════ */
 const S = {
   settings:        null,
-  hasDefaultKey:   false,   // set from /settings response
+  hasDefaultKey:   false,
   dailyLimit:      CFG.LIMIT_DEFAULT,
   provider:        "Cohere",
   model:           "command-a-03-2025",
+  customModel:     "",        // user-typed custom model name
   mode:            "Zero-Shot",
   persona:         "Assistant",
   temperature:     0.7,
@@ -99,7 +141,7 @@ const S = {
   currentHistId:   null,
 };
 
-const PERSIST = ["provider","model","mode","persona","temperature","maxTokens",
+const PERSIST = ["provider","model","customModel","mode","persona","temperature","maxTokens",
                  "cotSteps","memoryEnabled","customSysPrompt","apiKey","fsPreset","fsCustom"];
 
 /* ═══════════════════════════════════════════
@@ -108,7 +150,7 @@ const PERSIST = ["provider","model","mode","persona","temperature","maxTokens",
 const Usage = {
   _today(){ return new Date().toISOString().slice(0,10); },
   _get(){
-    try{ const r=JSON.parse(localStorage.getItem(CFG.LS_USAGE)||"{}"); return r; }catch{return {};}
+    try{ return JSON.parse(localStorage.getItem(CFG.LS_USAGE)||"{}"); }catch{return {};}
   },
   count(){
     const d=this._get(); return d.date===this._today() ? (d.count||0) : 0;
@@ -120,7 +162,6 @@ const Usage = {
     return count;
   },
   limitHit(){ return !S.apiKey && !S.hasDefaultKey && this.count() >= S.dailyLimit; },
-  // When there IS a default key, limit applies to shared usage
   sharedLimitHit(){ return !S.apiKey && S.hasDefaultKey && this.count() >= S.dailyLimit; },
   usingOwnKey(){ return !!S.apiKey; },
 };
@@ -175,15 +216,25 @@ function scrollBottom(smooth=true){
   vp.scrollTo({top:vp.scrollHeight,behavior:smooth?"smooth":"instant"});
 }
 function activeKey(){
-  // User's own key takes priority; fall back to server default (empty string sent → server resolves)
-  return S.apiKey.trim() || "";  // server-side will use DEFAULT_API_KEY if empty
+  return S.apiKey.trim() || "";
 }
 function canSend(){
-  if(S.apiKey) return true;         // own key → always OK
-  if(S.hasDefaultKey){
-    return !Usage.sharedLimitHit(); // shared key has daily limit
+  if(S.apiKey) return true;
+  if(S.hasDefaultKey){ return !Usage.sharedLimitHit(); }
+  return false;
+}
+
+/** Return the short display label for a model ID */
+function shortModel(modelId){
+  return CFG.MODEL_SHORT[modelId] || modelId;
+}
+
+/** Return the actual model string to send in the API payload */
+function resolvedModel(){
+  if(S.model === CFG.CUSTOM_SENTINEL){
+    return (S.customModel || "").trim();
   }
-  return false;                     // no key at all
+  return S.model;
 }
 
 /* ═══════════════════════════════════════════
@@ -216,7 +267,6 @@ function initAurora(){
       ctx.ellipse(x,y,r*1.4,r,(i*.6+t*o.sp*.3)%(Math.PI*2),0,Math.PI*2);
       ctx.fill();
     });
-    // Random star twinkle
     if(t%3===0){
       ctx.fillStyle="rgba(180,180,255,0.45)";
       for(let i=0;i<3;i++){
@@ -248,7 +298,6 @@ let   _codeIdx=0;
 function initMarkdown(){
   if(typeof marked==="undefined")return;
   const renderer={
-    // marked v11: code() receives positional args, not a destructured object
     code(code,language){
       const lang=(typeof language==="object"&&language!==null)?language.lang||"": language||"";
       const sl=lang.toLowerCase().trim()||"text";
@@ -261,18 +310,13 @@ function initMarkdown(){
       _codeStore[idx]=text;
       return `<div class="code-block-wrap"><div class="code-header"><span class="code-lang">${sl}</span><button class="copy-btn" data-ci="${idx}" onclick="App.copyCode(this)">Copy</button></div><pre><code class="hljs language-${sl}">${hi}</code></pre></div>`;
     },
-    // explicit heading renderer — ensures h1/h2/h3/h4 produce correctly sized tags
     heading(text,level){
       const t=typeof text==="object"&&text!==null?(text.text||text.raw||String(text)):String(text);
       const l=typeof level==="object"&&level!==null?(level.depth||level.level||1):Number(level)||1;
       return `<h${l}>${t}</h${l}>\n`;
     },
   };
-  marked.use({
-    renderer,
-    gfm:true,
-    breaks:true,
-  });
+  marked.use({ renderer, gfm:true, breaks:true });
 }
 
 function renderMd(text){
@@ -339,14 +383,14 @@ const DOM={
       .replace(/&/g,"&amp;")
       .replace(/</g,"&lt;")
       .replace(/>/g,"&gt;")
-      .replace(/\n+/g," ")   // collapse newlines → single space
+      .replace(/\n+/g," ")
       .trim();
     const g=document.createElement("div"); g.className="msg-group";
     g.innerHTML=`<div class="user-row"><div><div class="user-bubble">${safe}</div><div class="user-ts">${time}</div></div></div>`;
     return g;
   },
 
-   buildAiMsg(msg){
+  buildAiMsg(msg){
     const html=renderMd(msg.content);
     const tok =msg.tokens    ?`<span class="meta-pill"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>${fmtTok(msg.tokens)}</span>`:"";
     const lat =msg.latencyMs ?`<span class="meta-pill"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${(msg.latencyMs/1000).toFixed(2)}s</span>`:"";
@@ -356,11 +400,13 @@ const DOM={
     g.innerHTML=`<div class="ai-row"><div class="ai-avatar"><img class="ai-avatar-img" src="/static/logo.png" alt="AI"/></div><div class="ai-bubble"><div class="ai-content">${html}</div><div class="ai-footer"><span class="ai-mode-tag">${msg.mode||S.mode}</span><div class="ai-meta">${tok}${lat}${cost}</div><button class="ai-dl-btn" onclick="App.dlMsg(${midx})"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Save</button><span style="color:var(--t4)">${msg.time}</span></div></div></div>`;
     return g;
   },
+
   buildThinking(){
     const g=document.createElement("div"); g.id="thinkingRow"; g.className="thinking-row";
     g.innerHTML=`<div class="ai-avatar"><img class="ai-avatar-img" src="/static/logo.png" alt="AI"/></div><div class="thinking-bubble"><div class="dots"><span></span><span></span><span></span></div></div>`;
     return g;
   },
+
   buildStreamBubble(mode){
     const g=document.createElement("div"); g.className="msg-group";
     const content=document.createElement("div"); content.className="ai-content stream-cursor";
@@ -373,26 +419,49 @@ const DOM={
     return {group:g,content,footer};
   },
 
-  // Populate provider select — static fallback used immediately
+  // ── Provider select ───────────────────────────────────────
   populateProviders(current){
     const sel=$("providerSel"); if(!sel)return;
     const names=Object.keys(CFG.PROVIDERS_FALLBACK);
     sel.innerHTML=names.map(k=>`<option value="${k}"${k===current?" selected":""}>${k}</option>`).join("");
   },
 
-  // Populate model select for a given provider — always ensures a valid selection
+  // ── Model select — short labels, Custom at bottom ─────────
   populateModels(provider, current){
     const sel=$("modelSel"); if(!sel)return;
     const p=CFG.PROVIDERS_FALLBACK[provider];
-    const models=(S.settings?.providers?.[provider]?.models)||p?.models||[];
+    const serverModels = S.settings?.providers?.[provider]?.models || [];
+    const models = serverModels.length ? serverModels : (p?.models || []);
     if(!models.length)return;
-    // If saved model is stale (not in list), fall back to provider default
-    const validCurrent = models.includes(current) ? current : (p?.default || models[0]);
-    // Update state too so topbar stays in sync
+
+    // Determine valid selection
+    const isCustom = current === CFG.CUSTOM_SENTINEL;
+    const validCurrent = isCustom ? CFG.CUSTOM_SENTINEL
+      : (models.includes(current) ? current : (p?.default || models[0]));
+
     S.model = validCurrent;
-    sel.innerHTML=models.map(m=>`<option value="${m}"${m===validCurrent?" selected":""}>${m}</option>`).join("");
+
+    // Build options: short label for each preset, then "Custom model…"
+    const opts = models.map(m =>
+      `<option value="${m}"${m===validCurrent?" selected":""}>${shortModel(m)}</option>`
+    ).join("");
+    const customSel = validCurrent === CFG.CUSTOM_SENTINEL ? " selected" : "";
+    sel.innerHTML = opts +
+      `<option value="${CFG.CUSTOM_SENTINEL}"${customSel}>Custom model…</option>`;
+
+    DOM.toggleCustomModelInput(validCurrent === CFG.CUSTOM_SENTINEL);
   },
 
+  // ── Show/hide custom model input below the model dropdown ─
+  toggleCustomModelInput(show){
+    const wrap=$("customModelWrap"); if(!wrap)return;
+    wrap.style.display = show ? "block" : "none";
+    if(show){
+      const inp=$("customModelInput"); if(inp)inp.value=S.customModel||"";
+    }
+  },
+
+  // ── Persona select ────────────────────────────────────────
   populatePersonas(personas,current){
     const sel=$("personaSel"); if(!sel)return;
     sel.innerHTML=Object.entries(personas).map(([k,v])=>`<option value="${k}"${k===current?" selected":""}>${v.icon} ${k}</option>`).join("");
@@ -422,7 +491,7 @@ const DOM={
   },
 
   buildModePanel(mode){
-    const wrap=$("modeOptions"); if(!wrap){wrap&&(wrap.innerHTML="");return;}
+    const wrap=$("modeOptions"); if(!wrap)return;
     wrap.innerHTML="";
     if(mode==="Few-Shot") wrap.appendChild(DOM._fewShotPanel());
     else if(mode==="Chain-of-Thought") wrap.appendChild(DOM._cotPanel());
@@ -543,7 +612,11 @@ const UI={
 
   updateTopbar(){
     const m=$("topbarMode"); if(m)m.textContent=S.mode;
-    const mo=$("topbarModel"); if(mo)mo.textContent=`${S.provider} · ${S.model}`;
+    // Show short model name in topbar
+    const displayModel = S.model===CFG.CUSTOM_SENTINEL
+      ? (S.customModel||"custom")
+      : shortModel(S.model);
+    const mo=$("topbarModel"); if(mo)mo.textContent=`${S.provider} · ${displayModel}`;
     const b=$("inputModeBadge"); if(b)b.textContent=S.mode;
     const ta=$("msgInput"); if(ta)ta.placeholder=`Message  ·  ${S.mode}  ·  ${S.persona}`;
   },
@@ -576,8 +649,9 @@ const UI={
 
   updateProviderUI(){
     const p=CFG.PROVIDERS_FALLBACK[S.provider];
-    const tier=$("providerTier"); if(tier)tier.innerHTML=p?.tier||"";
-    const cost=$("modelCost");    if(cost)cost.textContent=p?`≈ $${p.cost.toFixed(4)} / 1k tokens`:"";
+    const tier=$("providerTier");
+    if(tier)tier.innerHTML=(p?.tier||"")+(p?.speed?` <span style="margin-left:6px">${p.speed}</span>`:"");
+    const cost=$("modelCost"); if(cost)cost.textContent=p?`≈ $${p.cost.toFixed(4)} / 1k tokens`:"";
     const docs=$("keyDocs");
     if(docs&&p)docs.innerHTML=`Get key → <a href="${p.docs}" target="_blank" rel="noopener">${p.docs.replace("https://","")}</a>`;
   },
@@ -591,11 +665,7 @@ const UI={
       uf.style.width=`${pct}%`;
       uf.style.background=pct>=100?"linear-gradient(90deg,var(--err),#ff6b6b)":pct>=80?"linear-gradient(90deg,var(--wrn),var(--err))":"linear-gradient(90deg,var(--ac),var(--vio))";
     }
-
-    // Hide usage bar if user has own key
     const uw=$("usageWrap"); if(uw)uw.style.display=S.apiKey?"none":"block";
-
-    // Key status label
     const ks=$("keyStatus");
     if(ks){
       if(S.apiKey){
@@ -606,8 +676,6 @@ const UI={
         ks.className="key-status"; ks.textContent="";
       }
     }
-
-    // Banner
     const banner=$("apiBanner");
     if(banner){
       if(Usage.sharedLimitHit()){
@@ -622,7 +690,6 @@ const UI={
         banner.className="api-banner";
       }
     }
-
     const dot=$("statusDot");
     if(dot&&!S.streaming) dot.className=`status-dot ${canSend()?"online":"error"}`;
   },
@@ -646,7 +713,6 @@ const UI={
    ACCORDION
 ═══════════════════════════════════════════ */
 function initAccordions(){
-  // Open Model & Mode by default; others closed
   ["acc-model","acc-mode"].forEach(id=>{
     const el=$(id); if(el)el.classList.add("open");
   });
@@ -660,30 +726,26 @@ const App={
   async init(){
     loadState();
 
-    // ── Clear stale model if it's no longer valid for saved provider ──
+    // Clear stale model if no longer valid for saved provider
     const p0 = CFG.PROVIDERS_FALLBACK[S.provider];
     const m0  = p0?.models || [];
-    if(m0.length && !m0.includes(S.model)){
+    if(m0.length && !m0.includes(S.model) && S.model !== CFG.CUSTOM_SENTINEL){
       S.model = p0?.default || m0[0];
     }
+
     initMarkdown();
     initAurora();
     initCursorGlow();
     initAccordions();
 
-    // 1. Populate selects immediately from static fallback (never empty on load)
     DOM.populateProviders(S.provider);
     DOM.populateModels(S.provider, S.model);
-
-    // 2. Build mode pills + guide from static config
     DOM.buildModePills(S.mode);
     DOM.buildModeGuide(S.mode);
     DOM.buildModePanel(S.mode);
 
-    // 3. Welcome screen
     const msgs=$("chatMessages"); if(msgs)msgs.appendChild(DOM.buildWelcome());
 
-    // 4. Sync all UI state
     UI.setSending(false);
     UI.syncSliders();
     const ki=$("apiKeyInput"); if(ki)ki.value=S.apiKey;
@@ -693,22 +755,35 @@ const App={
     UI.updateStats();
     DOM.buildHistoryList();
 
-    // 5. Load /settings from API (enriches data; doesn't block UI)
     try{
       const settings=await API.settings();
       S.settings=settings;
       S.hasDefaultKey  = settings.has_default_key  || false;
       S.dailyLimit     = settings.daily_free_limit  || CFG.LIMIT_DEFAULT;
 
-      // Re-validate provider/model against server list
       if(!settings.providers[S.provider]) S.provider=settings.active_provider;
       const pMods=settings.providers[S.provider]?.models||[];
-      if(!pMods.includes(S.model)) S.model=settings.providers[S.provider]?.default_model||pMods[0]||S.model;
+      if(S.model !== CFG.CUSTOM_SENTINEL && !pMods.includes(S.model)){
+        S.model=settings.providers[S.provider]?.default_model||pMods[0]||S.model;
+      }
 
-      // Refresh selects with authoritative server data
+      // Sync Gemini into fallback if server returned it (for future-proofing)
+      for(const [name, info] of Object.entries(settings.providers)){
+        if(!CFG.PROVIDERS_FALLBACK[name]){
+          CFG.PROVIDERS_FALLBACK[name]={
+            models:  info.models,
+            default: info.default_model,
+            cost:    info.cost_per_1k,
+            docs:    info.docs_url,
+            tier:    "",
+            speed:   "",
+          };
+        }
+      }
+
       DOM.populateProviders(S.provider);
-      DOM.populateModels(S.provider,S.model);
-      DOM.populatePersonas(settings.personas,S.persona);
+      DOM.populateModels(S.provider, S.model);
+      DOM.populatePersonas(settings.personas, S.persona);
 
       UI.updateTopbar();
       UI.updateProviderUI();
@@ -716,19 +791,18 @@ const App={
       UI.updatePersonaTip();
     }catch(err){
       toast(`Cannot reach API: ${err.message}`,"error",6000);
-      // Still try to populate persona select from hardcoded fallback
       DOM.populatePersonas({
-        Assistant:{icon:"🤖",tip:"Balanced general-purpose responses."},
-        Engineer: {icon:"💻",tip:"Production code with explanations."},
-        Analyst:  {icon:"📊",tip:"Deep, structured, evidence-based answers."},
-        Writer:   {icon:"✍️",tip:"Expressive narrative responses."},
-        Teacher:  {icon:"🎓",tip:"Teaches by asking, not telling."},
+        Assistant:       {icon:"🤖",tip:"Balanced general-purpose responses."},
+        Engineer:        {icon:"💻",tip:"Production code with explanations."},
+        Analyst:         {icon:"📊",tip:"Deep, structured, evidence-based answers."},
+        Writer:          {icon:"✍️",tip:"Expressive narrative responses."},
+        Teacher:         {icon:"🎓",tip:"Teaches by asking, not telling."},
         "Data Scientist":{icon:"📈",tip:"Analytical and quantitative focus."},
       }, S.persona);
     }
 
     UI.updateUsage();
-    document.addEventListener("keydown",App._globalKey);
+    document.addEventListener("keydown", App._globalKey);
   },
 
   _globalKey(e){
@@ -736,24 +810,32 @@ const App={
     if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key==="E"){e.preventDefault();App.exportChat();}
   },
 
-  /* Accordion */
   toggleAcc(id){
     const el=$(id); if(!el)return;
     el.classList.toggle("open");
   },
 
-  /* Provider/Model */
+  /* Provider / Model */
   onProviderChange(){
     S.provider=$("providerSel")?.value||S.provider;
-    // Always reset to provider's default model on provider switch
     const p=CFG.PROVIDERS_FALLBACK[S.provider];
     const mods=(S.settings?.providers?.[S.provider]?.models)||p?.models||[];
     S.model = p?.default || mods[0] || S.model;
+    S.customModel = "";
     DOM.populateModels(S.provider, S.model);
     UI.updateTopbar(); UI.updateProviderUI(); saveState();
   },
+
   onModelChange(){
-    S.model=$("modelSel")?.value||S.model;
+    const val=$("modelSel")?.value||S.model;
+    S.model = val;
+    DOM.toggleCustomModelInput(val === CFG.CUSTOM_SENTINEL);
+    if(val !== CFG.CUSTOM_SENTINEL) S.customModel = "";
+    UI.updateTopbar(); saveState();
+  },
+
+  onCustomModelChange(v){
+    S.customModel = v.trim();
     UI.updateTopbar(); saveState();
   },
 
@@ -795,7 +877,6 @@ const App={
     if(h)h.style.display=hide?"block":"none";
   },
   focusKeyInput(){
-    // Open model accordion and focus key field
     const acc=$("acc-model"); if(acc&&!acc.classList.contains("open"))acc.classList.add("open");
     const ki=$("apiKeyInput"); if(ki){ki.focus();ki.scrollIntoView({behavior:"smooth",block:"center"});}
   },
@@ -839,18 +920,23 @@ const App={
     if(S.streaming)return;
     const ta=$("msgInput"); const text=ta?.value.trim(); if(!text)return;
 
-    // Guard: no key at all
     if(!S.hasDefaultKey&&!S.apiKey){
       toast("No API key available — add your key in the sidebar","error");
       App.focusKeyInput(); return;
     }
-    // Guard: shared key limit
     if(Usage.sharedLimitHit()){
       toast(`Daily free limit (${S.dailyLimit}) reached — add your own key for unlimited access`,"error",5000);
       App.focusKeyInput(); return;
     }
 
-    S.model=$("modelSel")?.value||S.model;
+    // Resolve the actual model string
+    const modelToSend = resolvedModel();
+    if(!modelToSend){
+      toast("Enter a custom model name first","error");
+      const inp=$("customModelInput"); if(inp){inp.focus();}
+      return;
+    }
+
     let examples=null;
     if(S.mode==="Few-Shot"){
       const preset=S.settings?.few_shot_presets?.[S.fsPreset];
@@ -858,12 +944,12 @@ const App={
     }
 
     const payload={
-      user_input:text,mode:S.mode,persona:S.persona,
-      provider:S.provider,model:S.model,
-      api_key:S.apiKey,   // empty string → server uses DEFAULT_API_KEY env var
-      temperature:S.temperature,max_tokens:S.maxTokens,
-      memory_enabled:S.memoryEnabled,cot_steps:S.cotSteps,
-      examples,custom_system_prompt:S.customSysPrompt,session_id:S.sessionId,
+      user_input:text, mode:S.mode, persona:S.persona,
+      provider:S.provider, model:modelToSend,
+      api_key:S.apiKey,
+      temperature:S.temperature, max_tokens:S.maxTokens,
+      memory_enabled:S.memoryEnabled, cot_steps:S.cotSteps,
+      examples, custom_system_prompt:S.customSysPrompt, session_id:S.sessionId,
     };
 
     if(ta){ta.value="";App.autoResize(ta);}
@@ -883,7 +969,7 @@ const App={
   /* Export full */
   exportChat(){
     if(!S.messages.length){toast("Nothing to export","info");return;}
-    App._dl(JSON.stringify({app:"NeuralChat",version:"6.1",exported:new Date().toISOString(),settings:{provider:S.provider,model:S.model,mode:S.mode,persona:S.persona,temperature:S.temperature,max_tokens:S.maxTokens,memory:S.memoryEnabled},messages:S.messages.map(m=>({role:m.role,content:m.content,time:m.time,mode:m.mode,tokens:m.tokens,latency_ms:m.latencyMs,cost_usd:m.costUsd})),totals:{tokens:S.totalTokens,cost_usd:S.totalCost.toFixed(6)}},null,2),`neuralchat_${new Date().toISOString().replace(/[:.]/g,"-").slice(0,19)}.json`);
+    App._dl(JSON.stringify({app:"NeuralChat",version:"6.3",exported:new Date().toISOString(),settings:{provider:S.provider,model:resolvedModel(),mode:S.mode,persona:S.persona,temperature:S.temperature,max_tokens:S.maxTokens,memory:S.memoryEnabled},messages:S.messages.map(m=>({role:m.role,content:m.content,time:m.time,mode:m.mode,tokens:m.tokens,latency_ms:m.latencyMs,cost_usd:m.costUsd})),totals:{tokens:S.totalTokens,cost_usd:S.totalCost.toFixed(6)}},null,2),`neuralchat_${new Date().toISOString().replace(/[:.]/g,"-").slice(0,19)}.json`);
     toast("↓ Exported");
   },
 
